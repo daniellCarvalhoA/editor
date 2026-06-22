@@ -1,0 +1,30 @@
+Rendering:
+
+    Idea 1> Grid represents the state of the whole screen.
+         2> Each window builds a per frame subgrid which represents the screen area 
+         that has changed within that window in the current frame.
+         3> To render, we calculate the difference between the window grids and the screen 
+         grids. We send the diff to the ui frontend (currently we only have the terminal)
+         and update the screen grid.
+
+    Spetial cases: Potential Optimizations:
+        1> scrolling: We must only create the per window subgrid for the part of the screen 
+        that has been scrolled in.
+        The other parts diff can be calculated within the grid itself. 
+        2> We should maybe sort the diffs by row (use stable sort, the average case will be sorted),
+        assuming the terminal updates the screen ((left, top) to (right, bottom));
+
+The difficulty is calculating the subgrid range.
+
+Every time the user changes a buffer the range of change is given by (top_changed, bot_changed);
+
+window->top_line is the buffer line which corresponds to the windows top line.
+we must calculate the intersection of (top_line, one_after_bot_line) and (top_change, bot_changed);
+
+    1> if it is empty there is nothing to do.
+    2> otherwise, we must map the the intersection which is in buffer space to grid space;
+
+
+Should I have a diff_grid per window?;
+    1> Disadvantages: More memory (but slighly);
+    2> Advantages: Multithreaded diff calculation;
