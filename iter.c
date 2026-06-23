@@ -36,25 +36,25 @@ const u8 utf8_len_table[] = {
 };
 
 
-static i32 prev_codepoint(const u8 *s, size_t len, size_t pos, size_t *start)
-{
-    Assert(pos > 0);
-    ssize_t i = (ssize_t) pos - 1;
-
-    while ((i >= 0) && (s[i] & 0xC0) == 0x80)
-    {
-        i--;
-    }
-
-    i32 codepoint;
-    i32 rc = utf8proc_iterate(s + i, (i32) (len - i), &codepoint);
-
-    *start = (size_t) i;
-    return codepoint;
-
-
-}
-
+// static i32 prev_codepoint(const u8 *s, size_t len, size_t pos, size_t *start)
+// {
+//     Assert(pos > 0);
+//     ssize_t i = (ssize_t) pos - 1;
+//
+//     while ((i >= 0) && (s[i] & 0xC0) == 0x80)
+//     {
+//         i--;
+//     }
+//
+//     i32 codepoint;
+//     i32 rc = utf8proc_iterate(s + i, (i32) (len - i), &codepoint);
+//
+//     *start = (size_t) i;
+//     return codepoint;
+//
+//
+// }
+//
 static u32 utf8_charlen_unchecked(const u8 *const str, u32 size)
 {
     u8 c = (u8)(*str);
@@ -63,7 +63,7 @@ static u32 utf8_charlen_unchecked(const u8 *const str, u32 size)
         return 1; // ASCII
     }
 
-    u32 prev_len = 0;
+    // u32 prev_len = 0;
     utf8proc_int32_t state = 0;
 
     utf8proc_int32_t prev_codepoint;

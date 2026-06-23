@@ -46,7 +46,7 @@ static void initialize_editor(editor_state *state, char *filepath)
     state->root_window = create_first_window(&state->arena, &state->screen, LeafBuffer);
     active_window = state->root_window;
 
-    window *command_window = create_window(&state->arena, &state->screen, LeafCommand, WinFlags_Fixed);
+    window *command_window = create_window(&state->arena, LeafCommand, WinFlags_Fixed);
     state->command_window = command_window;
     attach_window(&state->arena,
         &state->screen,
@@ -86,7 +86,7 @@ extern UPDATE_AND_RENDER(update_and_render)
         {
             case Insert:
             {
-                if (process_insert(&editor->screen, input, input_size))
+                if (process_insert(input, input_size))
                 {
                     return true;
                 }
@@ -96,7 +96,7 @@ extern UPDATE_AND_RENDER(update_and_render)
             {
                 if (active_window == editor->command_window)
                 {
-                    process_command(editor, input, input_size);
+                    parse_command(editor, input, input_size);
                 }
                 else
                 {

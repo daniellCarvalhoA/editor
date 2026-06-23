@@ -79,7 +79,7 @@ typedef struct editor_state
 
 } editor_state;
 
-static piece_list *get_active_buffer(editor_state *state)
+static piece_list *get_active_buffer()
 {
     piece_list *result = active_window->buffer;
     return result;

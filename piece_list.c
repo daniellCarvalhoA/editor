@@ -303,8 +303,8 @@ static void move_to(piece_list *list, u32 position)
 
     list->cy = get_line_number(&list->iter);
 
-    base_iter start_line_iter = find_line(&list->iter, list->cy);
-    u32 start_line_pos        = get_position(&start_line_iter);
+    // base_iter start_line_iter = find_line(&list->iter, list->cy);
+    // u32 start_line_pos        = get_position(&start_line_iter);
 
     
     normalize(&list->iter);
@@ -1547,15 +1547,6 @@ static void initialize_piece_list(piece_list *list, u8 *original_text, u32 origi
     list->wrapped = false;
 
     base_init_(list, Position, &list->iter);
-    // if (list->lcnt == 0)
-    // {
-    //     list->line_len = list->size;
-    // }
-    // else
-    // {
-    //     // base_iter next_iter = find_line(&list->iter, 1);
-    //     // list->line_len = get_position(&next_iter) - (list->pos + 1);
-    // }
 }
 
 static void init_buffer(piece_list *list, char *filepath)
@@ -1569,11 +1560,42 @@ static void init_buffer(piece_list *list, char *filepath)
         original_text_len = handle.size;
         original_text = (u8 *) PushArray(&list->list_arena, handle.size, u8, NoClear());
         Platform.ReadDataFromFile(&handle, 0, handle.size, original_text);
+        Platform.CloseFile(handle);
     }
 
     initialize_piece_list(list, original_text, original_text_len);
     INIT_LIST_HEAD(&list->window_sentinel);
 }
+
+static void write_buffer_to_file(piece_list *list)
+{
+    if (list->filepath)
+    {
+        platform_file_handle handle = Platform.OpenFile(list->filepath);
+        Platform.AllocateDiskSpace(&handle, 0, list->size);
+
+        for (segmented_node *node = list->root_sentinel.next;
+            node != &list->root_sentinel;
+            node = node->next)
+        {
+            platform_scatter_gather_vector iov[node->count];
+
+            for (u32 i = 0; i < node->count; ++i)
+            {
+                piece piece = node->pieces[i];
+                buffer_type type = node->b_types[i];
+
+                const buffer *buffer = get_buffer_2(list, type);
+                u32 offset = buffer->lines[piece.off.row] + piece.off.col;
+                iov[i].base = (void *) (buffer->text + offset);
+                iov[i].size = piece.size;
+            }
+            Platform.WriteGather(&handle, iov, node->count);
+        }
+        Platform.CloseFile(handle);
+    }
+}
+
 
 static piece_list *create_buffer(memory_arena *arena, char *filepath)
 {

@@ -483,7 +483,7 @@ static void insert_mode_delete()
     list->line_len--;
 }
 
-static b32 process_insert(screen *screen, u8 *input, u32 input_size)
+static b32 process_insert(u8 *input, u32 input_size)
 {
     b32 result = false;
     switch (*input)

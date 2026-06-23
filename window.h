@@ -68,6 +68,7 @@ typedef enum
     Render_FocusChange            = 0x20,
     Render_VisualModeCursorChange = 0x40,
     Render_StatusVisibilityChange = 0x80,
+    Render_BufferExchange         = 0x100,
 } render_change;
 
 typedef enum
@@ -82,18 +83,10 @@ typedef struct window
     layout layout;
     render_change change;
     win_flags flags;
-    u32 idx;
-    // Window position on the screen
-    //
 
     u16 offset;
-    // u16 screen_x;
-    // u16 screen_y;
-    // Window dimensions
     u16 full_dim;
     u16 dyn_dim;
-    // u16 height;
-    // u16 width;
     // Cursor position relative to the window top-left corner
     u16 cx;
     u16 cy;
@@ -113,6 +106,7 @@ typedef struct window
     grid_view view;
 
     struct window *parent;
+
     dlist first_child;
     dlist sibling;
     dlist next_in_buffer;
@@ -125,6 +119,21 @@ typedef struct window
     u16 num_children;
     u16 num_fixed;
 } window;
+
+static inline void clear_window(window *win)
+{
+    // win->offset = 0;
+    win->cx = 0;
+    win->cy = 0;
+    win->bcx = 0;
+    win->bcy = 0;
+    win->dcx = 0;
+    win->dcy = 0;
+    win->vcx = 0;
+    win->vcy = 0;
+    win->top_line = 0;
+    win->cx = 0;
+}
 
 
 static inline u16 get_width(screen *screen, window *win)

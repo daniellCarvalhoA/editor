@@ -4,6 +4,7 @@
 #include <sys/signalfd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/uio.h>
 
 #include <signal.h>
 #include <errno.h>
@@ -20,40 +21,30 @@ static platform_api Platform;
 static struct termios term;
 static struct termios old_term;
 
-const u8 utf8_len_table[] = {
-    // 1  2  3  4  5  6  7  8  9  A  B  C  D  E  F
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 1
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 2
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 3
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 4
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 5
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 6
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 7
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 8
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 9
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // A
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // B
-    0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // C
-    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // D
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, // E
-    4, 4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // F
-};
-
-
-
 PLATFORM_OPEN_FILE(LinuxOpenFile)
 {
-    platform_file_handle result = {};
+    platform_file_handle result = { .no_errors = true};
 
     i32 fd = open(filepath, O_RDWR);
-
-    struct stat file_status;
-    fstat(fd, &file_status);
-    result.Platform = (void *) (u64) fd;
-    result.size = file_status.st_size;
+    if (fd == -1)
+    {
+        result.no_errors = false;
+    }
+    else
+    {
+        struct stat file_status;
+        fstat(fd, &file_status);
+        result.Platform = (void *) (u64) fd;
+        result.size = file_status.st_size;
+    }
 
     return result;
+}
+
+PLATFORM_CLOSE_FILE(LinuxCloseFile)
+{
+    i32 fd = (i32) (u64) (handle.Platform);
+    close(fd);
 }
 
 PLATFORM_READ_DATA_FROM_FILE(LinuxReadFromFile)
@@ -61,17 +52,45 @@ PLATFORM_READ_DATA_FROM_FILE(LinuxReadFromFile)
     u32 bytes_to_read = size;
     u8 *next_byte_location = (u8 *) dst;
 
-    i32 fd = (i32) (u64) src->Platform;
+    i32 fd = (i32) (u64) handle->Platform;
     lseek(fd, (off_t) offset, SEEK_SET);
     while (bytes_to_read)
     {
         ssize_t bytes_read = read(fd, next_byte_location, bytes_to_read);
         if (bytes_read == -1)
         {
+            handle->no_errors = false;
+            break;
         }
         bytes_to_read -= bytes_read;
         next_byte_location += bytes_read;
     }
+}
+
+PLATFORM_ALLOCATE_DISK_SPACE(LinuxAllocateDiskSpace)
+{
+    i32 fd = (i32) (u64) handle->Platform;
+    i32 ret = posix_fallocate(fd, offset, len);
+
+    if (ret != 0)
+    {
+        perror("posix_fallocate");
+        handle->no_errors = false;
+    }
+}
+
+PLATFORM_WRITE_GATHER(LinuxWriteGather)
+{
+    i32 fd = (i32) (u64) handle->Platform;
+    const struct iovec *iov = (const struct iovec *) vecs;
+    // i32 iov_flags = (i32) flags.flags;
+    i32 ret = writev(fd, iov, count);
+
+    if (ret == -1)
+    {
+        handle->no_errors = false;
+    }
+    // writev(
 }
 
 static void reset_mode()
@@ -255,7 +274,6 @@ int main(int argc, char **argv)
     char src_code_dll_fullpath[LINUX_FILENAME_COUNT];
     build_exe_path_name(&linux_state, "e.so", src_code_dll_fullpath);
 
-    u8 buf[4];
     int ifd, i, poll_num;
     int *wd;
     nfds_t nfds;
@@ -326,26 +344,18 @@ int main(int argc, char **argv)
 
     linux_e_code code = load_code(src_code_dll_fullpath);
 
-    memory.Platform.OpenFile = LinuxOpenFile;
-    memory.Platform.ReadDataFromFile = LinuxReadFromFile;
+    memory.Platform.OpenFile          = LinuxOpenFile;
+    memory.Platform.ReadDataFromFile  = LinuxReadFromFile;
+    memory.Platform.CloseFile         = LinuxCloseFile;
+    memory.Platform.AllocateDiskSpace = LinuxAllocateDiskSpace;
+    memory.Platform.WriteGather       = LinuxWriteGather;
 
     Platform = memory.Platform;
-
-
-    // Platform.OpenFile = LinuxOpenFile;
-    // Platform.ReadDataFromFile = LinuxReadFromFile;
 
     if (code.update_and_render(&memory, 0, 0, argc, (void **) argv))
     {
         return 1;
     }
-
-    char s[] = "â";
-    for (u32 i = 0; i < strlen(s); ++i)
-    {
-        fprintf(stderr, "%d, ", s[i]);
-    }
-    fprintf(stderr, "\n");
 
     while (1)
     {
@@ -369,11 +379,6 @@ int main(int argc, char **argv)
 
                 u8 buffer[4];
                 i32 num_read = read(STDIN_FILENO, buffer, 4);
-
-                // u32 codepoint_len = utf8_len_table[((u8 *) &buffer)[0]];
-
-                // u8 utf8_input_str[4];
-                // u32 codepoint_len = utf8proc_encode_char(buffer, utf8_input_str);
 
                 if (num_read > 0)
                 {

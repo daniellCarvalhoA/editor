@@ -147,8 +147,7 @@ static void fill_grid(screen *screen, window *win, grid_view grid)
     }
 }
 
-
-static void line_diff(screen *screen, window *win, grid_line old, grid_line new, u32 line)
+static void line_diff(screen *screen, window *win, grid_line old, grid_line new)
 {
     u16 prev_j = 0;
     u16 width = get_width(screen, win);
@@ -233,14 +232,14 @@ static void grid_diff(screen *screen, window *win, grid_view old, grid_view new)
     place_cursor(screen, screen_y, screen_x);
 
     u16 win_height = get_height(screen, win);
-    u16 height = (win->flags & WinFlags_StatusLineVisible) ? (win_height - 1) : win_height;
+    // u16 height = (win->flags & WinFlags_StatusLineVisible) ? (win_height - 1) : win_height;
     for (u16 i = 0; i < win_height; ++i)
     {
         grid_line old_line = get_grid_line(old, i);
         grid_line new_line = get_grid_line(new, i);
 
         set_cursor_column(screen, screen_x);
-        line_diff(screen, win, old_line, new_line, i); 
+        line_diff(screen, win, old_line, new_line); 
         if (i + 1 < win_height)
         {
             write_string(screen, (u8 *) "\r\n", sizeof("\r\n") - 1);

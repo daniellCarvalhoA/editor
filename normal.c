@@ -15,7 +15,7 @@ static parse_result parse_normal(editor_state *editor, char token)
         {
             interacting_window = active_window;
             active_window = editor->command_window;
-            process_command(editor, (u8 *) &token, 1);
+            parse_command(editor, (u8 *) &token, 1);
             // append_char(&active_window->c_buffer, (u8 *) ":", sizeof(":") - 1);
             // active_window->change |= Render_BufferChange;
             
@@ -494,9 +494,9 @@ static inline void change_mode(mode_change change)
     }
 }
 
-static void edit(editor_state *state)
+static void edit()
 {
-    piece_list *buffer = get_active_buffer(state);
+    // piece_list *buffer = get_active_buffer(state);
     switch (p_state.action)
     {
         case NoAction:
@@ -569,7 +569,7 @@ static void edit(editor_state *state)
                 edit_mode = Normal;
             }
 
-            u32 line_len = get_line_len_(&active_window->buffer->iter, active_window->dcy);
+            // u32 line_len = get_line_len_(&active_window->buffer->iter, active_window->dcy);
             // active_window->bcx = Minimum(active_window->dcx, line_len);
             active_window->buffer->changed = true;
         } break;
