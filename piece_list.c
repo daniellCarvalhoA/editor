@@ -1572,6 +1572,8 @@ static void write_buffer_to_file(piece_list *list)
     if (list->filepath)
     {
         platform_file_handle handle = Platform.OpenFile(list->filepath);
+        // This call may not be available, maybe have a query call 
+        // that asks the platform.
         Platform.AllocateDiskSpace(&handle, 0, list->size);
 
         for (segmented_node *node = list->root_sentinel.next;

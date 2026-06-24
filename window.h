@@ -122,7 +122,6 @@ typedef struct window
 
 static inline void clear_window(window *win)
 {
-    // win->offset = 0;
     win->cx = 0;
     win->cy = 0;
     win->bcx = 0;
@@ -134,7 +133,6 @@ static inline void clear_window(window *win)
     win->top_line = 0;
     win->cx = 0;
 }
-
 
 static inline u16 get_width(screen *screen, window *win)
 {

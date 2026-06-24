@@ -13,13 +13,27 @@ typedef struct piece
     union
     {
         offset off;
-        u8 data[8]; // This path is not yet implemented!! 
-                    // What to do if an edit makes a piece whose size was bigger than 64 bytes, 
-                    // smaller than 64 bytes.
+        u8 data[8]; // This path is not yet implemented and may never be!! 
+                    // The idea would be to inline text inside the piece itself if, 
+                    // it is smaller than some threshold value.
+                    //
+                    // Lets say we have a lot of very small sized pieces (1 - 4 bytes maybe),
+                    // in  sequence. When rendering, we incur a lot of cache misses if the text correspoinding 
+                    // to the pieces is not layed out one after the other in their corresponding buffers.
+                    // If we were to inline the text in the pieces we would bypass the buffer indirection.
+                    //
+                    //  
+                    // 
+                    // What to do if an edit makes a piece whose size was bigger than threshold, 
+                    // smaller than the threshold.
                     // Possible rules.
                     //
                     // 1> if a sequence of insert mode edits results in a piece whose size is 
-                    // less than or equal to 64 bytes, that piece gets inlined.
+                    // less than or equal to the threshold, that piece gets inlined.
+                    //
+                    // To inline the piece we must copy the text from the buffer to the piece.
+                    // We shall not remove the copied text from the buffer, since there may exist 
+                    // undo pieces which reference it.
                     //
                     // 2> An edit of an inlined piece results in an inlined pieces 
                     // (A normal mode edit of a piece never increases its size.

@@ -158,6 +158,7 @@ static inline void list_rotate_left(dlist *head)
     }
 }
 
+
 static inline void list_rotate_to_front(dlist *list, dlist *head)
 {
     list_move_tail(head, list);

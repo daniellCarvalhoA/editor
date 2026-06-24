@@ -181,7 +181,7 @@ static parse_tree parse_command_tree(command_buffer *buffer)
 
 static void process_command(editor_state *state)
 {
-    parse_tree p_tree = parse_command_tree(&state->command_window->c_buffer);
+    parse_tree p_tree = parse_command_tree(&state->screen.command_window->c_buffer);
 
     if (p_tree.flags & ParseFlags_Save)
     {
@@ -213,58 +213,19 @@ static void process_command(editor_state *state)
 
         active_window->change |= Render_BufferExchange;
 
-
-
-
-
     }
 
+    if (p_tree.flags & ParseFlags_Quit)
+    {
+        Assert(!(p_tree.flags & ParseFlags_Open));
 
-    // while (i < len)
-    // {
-    //     u32 char_len = utf8_charlen_unchecked(text + i, len - i);
-    //
-    //     if (char_len == 1)
-    //     {
-    //         switch (text[i])
-    //         {
-    //             case ':':
-    //             {
-    //                 p_state = Wait;
-    //             } break;
-    //
-    //             case 'q':
-    //             {
-    //             } break;
-    //
-    //             case 'e':
-    //             {
-    //                 Assert(p_state = Wait);
-    //             } break;
-    //
-    //             case 'w':
-    //             {
-    //                 Assert(p_state == Wait);
-    //                 Assert(active_window != state->command_window);
-    //                 Assert(active_window->buffer);
-    //                 write_buffer_to_file(active_window->buffer);
-    //                 p_state = Exit;
-    //             }
-    //
-    //             default:
-    //             {
-    //             } break;
-    //         }
-    //
-    //     }
-    //     else
-    //     {
-    //         // For now Exit
-    //         p_state = Err;
-    //         break;
-    //     }
-    // /     i += char_len;
-    // }
+        b32 should_quit = close_active_window(&state->screen);
+        fprintf(stderr, "shoudl_quit = %u\n", should_quit);
+    }
+    clear_buffer(&state->screen.command_window->c_buffer);
+    state->screen.command_window->bcx = 0;
+
+
 }
 
 static void parse_command(editor_state *state, u8 *input, u32 input_size)
@@ -275,27 +236,27 @@ static void parse_command(editor_state *state, u8 *input, u32 input_size)
         case '\x1b':
         {
             active_window = interacting_window;
-            clear_buffer(&state->command_window->c_buffer);
-            // active_window->bcx = 0;
-            // active_window->bcy = 0;
+            clear_buffer(&state->screen.command_window->c_buffer);
+            active_window->bcx = 0;
+            active_window->bcy = 0;
         } break;
 
         case '\r':
         {
             active_window = interacting_window;
             process_command(state);
-            clear_buffer(&state->command_window->c_buffer);
+            clear_buffer(&state->screen.command_window->c_buffer);
         } break;
 
         case 127:
         {
-            pop(&state->command_window->c_buffer);
+            pop(&state->screen.command_window->c_buffer);
             active_window->bcx--;
         } break;
 
         default:
         {
-            append_char(&state->command_window->c_buffer, input, input_size);
+            append_char(&state->screen.command_window->c_buffer, input, input_size);
             active_window->bcx++;
         } break;
     }

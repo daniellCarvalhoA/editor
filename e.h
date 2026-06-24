@@ -4,6 +4,7 @@
 #include <utf8proc.h>
 
 typedef struct piece_list piece_list;
+typedef struct window window;
 
 #include "command.h"
 #include "memory.h"
@@ -67,15 +68,15 @@ window *active_window      = NULL;
 window *interacting_window = NULL;
 
 static platform_api Platform;
+
+
 typedef struct editor_state
 {
     memory_arena arena;
-    dlist buffers;
-    window *root_window;
-    window *command_window;
-
-    // command_buffer c_buffer;
     screen screen;
+
+    dlist buffers;
+
 
 } editor_state;
 

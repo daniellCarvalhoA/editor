@@ -14,7 +14,7 @@ static parse_result parse_normal(editor_state *editor, char token)
         case ':':
         {
             interacting_window = active_window;
-            active_window = editor->command_window;
+            active_window = editor->screen.command_window;
             parse_command(editor, (u8 *) &token, 1);
             // append_char(&active_window->c_buffer, (u8 *) ":", sizeof(":") - 1);
             // active_window->change |= Render_BufferChange;

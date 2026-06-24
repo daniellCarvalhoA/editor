@@ -218,7 +218,7 @@ typedef struct
 typedef struct
 {
     multilevel_grid *grid;
-    u32 line_start;;
+    u32 line_start;
     u16 width;
 } grid_line;
 
@@ -240,6 +240,7 @@ static inline grid_view default_grid_view(multilevel_grid *grid, u16 height, u16
     };
     return result;
 }
+
 
 static inline void free_grid_view(grid_view view)
 {

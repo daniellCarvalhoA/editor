@@ -111,7 +111,7 @@ static string char_str_to_string(
 
 static void push_string(string *dst, string *src)
 {
-    assert(dst->len + src->len <= dst->capacity);
+    Assert(dst->len + src->len <= dst->capacity);
     memcpy(dst->buffer + dst->len, src->buffer, src->len);
     dst->len += src->len;
 }
