@@ -60,9 +60,9 @@ static void normal_mode()
 // } insert_mode_undo;
 
 
-static void insert_mode_insert(u8 *input, u32 input_size)
+static void insert_mode_insert(window *win, u8 *input, u32 input_size)
 {
-    window *win        = active_window;
+    // window *win        = active_window;
     piece_list *list   = win->buffer;
     u32 lines_inserted = (*input == '\n');
     base_iter location = find_cursor(&list->iter, win->bcy, win->bcx);
@@ -79,8 +79,8 @@ static void insert_mode_insert(u8 *input, u32 input_size)
             state->position  = position(&location);
             state->abs_idx   = location.abs_idx;
             state->ins_count = 1;
-            state->cx = active_window->bcx;
-            state->cy = active_window->bcy;
+            state->cx = win->bcx;
+            state->cy = win->bcy;
 
             piece pieces[2]      = { make_piece(list, input, input_size) };
             buffer_type types[2] = { BufferType_Append };
@@ -182,9 +182,9 @@ static void insert_mode_insert(u8 *input, u32 input_size)
     }
 }
 
-static void insert_mode_delete()
+static void insert_mode_delete(window *win)
 {
-    window *win = active_window;
+    // window *win = active_window;
     piece_list *list = win->buffer;
     insert_mode *state   = &list->i_state;
 
@@ -206,6 +206,8 @@ static void insert_mode_delete()
             state->state    = Deleted;
             state->deleted  = true;
             state->position = position(&iter);
+            state->cx = win->bcx;
+            state->cy = win->bcy;
 
             piece *curr_piece = get_piece_(&iter);
             buffer_type *type = get_type_(&iter);
@@ -497,7 +499,7 @@ static b32 process_insert(u8 *input, u32 input_size)
         {
             if (active_window->bcx != 0)
             {
-                insert_mode_delete();
+                insert_mode_delete(active_window);
             }
         } break;
 
@@ -510,12 +512,12 @@ static b32 process_insert(u8 *input, u32 input_size)
 
         case '\r':
         {
-            insert_mode_insert((u8 *) "\n", input_size);
+            insert_mode_insert(active_window, (u8 *) "\n", input_size);
         } break;
 
         default:
         {
-            insert_mode_insert(input, input_size);
+            insert_mode_insert(active_window, input, input_size);
         } break;
 
     }

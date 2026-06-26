@@ -12,7 +12,7 @@ static void fill_command_grid(screen *screen, window *win, grid_view grid)
         u16 col = 0;
         while (i < c_buffer->len)
         {
-            u32 cell_len = utf8_charlen_unchecked(c_buffer->text + i , c_buffer->len - i);
+            u32 cell_len = utf8_charlen_unchecked(c_buffer->buffer + i , c_buffer->len - i);
 
             grid_type type = U32;
             if (cell_len <= 3)
@@ -24,7 +24,7 @@ static void fill_command_grid(screen *screen, window *win, grid_view grid)
             u8 *data = get_cell_data(g_line, col, type);
             attr *at = get_cell_attr_(g_line, col);
 
-            memcpy(data, (void *) (c_buffer->text + i), sizeof(u8) * (type + 1));
+            memcpy(data, (void *) (c_buffer->buffer + i), sizeof(u8) * (type + 1));
             *at = Default;
 
             col++;
@@ -129,7 +129,11 @@ static void fill_grid(screen *screen, window *win, grid_view grid)
         attr *attribute  = get_cell_attr_(g_line, 0);
         u8 *data         = get_cell_data(g_line, 0, U8);
 
-        memset(types, U8, sizeof(grid_type) * width);
+        for (u32 i = 0; i < width; ++i)
+        {
+            types[i] = U8;
+        }
+        // memset(types, U8, sizeof(grid_type) * width);
         memset(attribute, Reversed, width);
 
         u32 len = 0;
@@ -237,6 +241,8 @@ static void grid_diff(screen *screen, window *win, grid_view old, grid_view new)
     {
         grid_line old_line = get_grid_line(old, i);
         grid_line new_line = get_grid_line(new, i);
+
+        old_line.line_start += old.width * new.y_offset + new.x_offset;
 
         set_cursor_column(screen, screen_x);
         line_diff(screen, win, old_line, new_line); 

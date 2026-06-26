@@ -158,7 +158,7 @@ static parse_result parse_normal(editor_state *editor, char token)
         {
             if (edit_mode == Normal) 
             {
-                undo_(active_window->buffer);
+                undo_(active_window);
                 active_window->buffer->changed = true;
                 result = Ok;
             }
@@ -462,7 +462,6 @@ static void move_by_motion(window *win, motion motion, u32 quantifier)
         {
         } break;
      }
-    fprintf(stderr, "bcx: %u, dcx: %u\n", win->bcx, win->dcx);
 }
 
 static inline void change_mode(mode_change change)
@@ -512,7 +511,7 @@ static void edit()
             move_by_motion(active_window, p_state.motion, p_state.quantifier);
             Assert(p_state.char_pending);
 
-            insert_mode_insert(&p_state.char_pending, 1);
+            insert_mode_insert(active_window, &p_state.char_pending, 1);
             active_window->buffer->changed = true;
 
         } break;

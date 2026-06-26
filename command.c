@@ -165,7 +165,7 @@ static void parse_comm(parse_tree *tree, tokenizer *tokenizer)
 static parse_tree parse_command_tree(command_buffer *buffer) 
 {
     parse_tree tree = {};
-    tokenizer tokenizer = { .at = buffer->text, .end = buffer->text + buffer->len };
+    tokenizer tokenizer = { .at = buffer->buffer, .end = buffer->buffer + buffer->len };
 
     if (require_token(&tokenizer, Token_Colon))
     {

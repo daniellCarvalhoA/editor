@@ -61,6 +61,10 @@ static void initialize_editor(editor_state *state, char *filepath)
 
     INIT_LIST_HEAD(&state->buffers);
     list_add(&buffer->list, &state->buffers);
+
+    set_color(&state->screen, 32);
+    draw_borders(&state->screen, state->screen.root_window);
+    reset_color(&state->screen);
 }
 
 extern UPDATE_AND_RENDER(update_and_render)

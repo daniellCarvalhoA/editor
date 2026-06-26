@@ -206,14 +206,23 @@ static inline void free_multilevel_grid(multilevel_grid *grid)
 typedef struct 
 {
     multilevel_grid *grid;
-    u16 start;
-    u16 end;
+    u16 y_offset;
+    u16 x_offset;
+    u16 height;
     u16 width;
 
-    line *lines;
-    u16 *grid_lines;
+    // line *lines;
+    // u16 *grid_lines;
 } grid_view;
 
+// static void free_view(grid_view *view)
+// {
+//     if (view->grid_lines)
+//     {
+//         free(view->grid_lines);
+//     }
+// }
+//
 
 typedef struct
 {
@@ -222,21 +231,29 @@ typedef struct
     u16 width;
 } grid_line;
 
-static inline grid_view default_grid_view(multilevel_grid *grid, u16 height, u16 width)
+static inline grid_view default_grid_view(
+    multilevel_grid *grid,
+    u16 y_offset,
+    u16 x_offset,
+    u16 height,
+    u16 width)
 {
-    u16 *grid_lines = (u16 *) malloc(sizeof(u16)  * height);
-
-    for (u32 i = 0; i < height; ++i)
-    {
-        grid_lines[i] = i * grid->cols;
-    }
+    // if (
+    // u16 *grid_lines = 
+    // u16 *grid_lines = (u16 *) malloc(sizeof(u16)  * height);
+    //
+    // for (u32 i = 0; i < height; ++i)
+    // {
+    //     grid_lines[i] = i * grid->cols;
+    // }
     
     grid_view result = {
         .grid  = grid,
-        .start = 0,
-        .end   = height,
+        .y_offset = y_offset,
+        .x_offset = x_offset,
+        .height   = height,
         .width = width,
-        .grid_lines = grid_lines,
+        // .grid_lines = grid_lines,
     };
     return result;
 }
@@ -245,12 +262,14 @@ static inline grid_view default_grid_view(multilevel_grid *grid, u16 height, u16
 static inline void free_grid_view(grid_view view)
 {
     free_multilevel_grid(view.grid);
-    free(view.grid_lines);
+    // free(view.grid_lines);
 }
 
 static inline grid_line get_grid_line(grid_view a, u16 line)
 {
-    u32 line_start = a.grid_lines[line];
+    // u32 line_start = a.grid_lines[line];
+    // u32 line_start = a.grid->cols * (a.y_offset + line); // + a.x_offset;
+    u32 line_start = a.grid->cols * line; // + a.x_offset;
     grid_line result = { .grid = a.grid, .line_start = line_start, .width = a.grid->cols };
     return result;
 }

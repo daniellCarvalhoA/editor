@@ -4,6 +4,22 @@ static inline b32 is_header_empty(const undo_memory_header *header)
     return result;
 }
 
+static inline u32 get_data_size(const undo_memory_header *header)
+{
+    u32 result = header->del_count * (sizeof(piece) + sizeof(buffer_type));
+    return result;
+}
+
+static inline void *get_data_start(const undo_memory_header *header)
+{
+    void *result = 0;
+    if (header->del_count)
+    {
+        result = (void *) (header + 1);
+    }
+    return result;
+}
+
 static inline piece *get_pieces_from_header(const undo_memory_header *header) 
 {
     piece *result = 0;

@@ -6,7 +6,7 @@ LOCKFILE="/tmp/e.lock"
 
 touch $LOCKFILE
 
-CommonFlags="-DDEBUG -Wall -Werror -g -Wextra  -fsanitize=address -Wno-unused-function   -DCOMPILER_GCC=1 -std=gnu99 -D_GNU_SOURCE"
+CommonFlags="-DDEBUG -Wall -Werror -g -Wextra  -fsanitize=address -Wno-unused-function  -Wno-unused-variable -DCOMPILER_GCC=1 -std=gnu99 -D_GNU_SOURCE"
 
 # -fsanitize=address 
 
@@ -14,9 +14,12 @@ CommonFlags="-DDEBUG -Wall -Werror -g -Wextra  -fsanitize=address -Wno-unused-fu
 gcc $CommonFlags -fPIC -shared  e.c -lutf8proc -o build/e.so
 rm -f $LOCKFILE
 
+export ASAN_OPTIONS=abort_on_error=1
+# export ASAN_OPTIONS=handle_segv=0
+
 gcc $CommonFlags e_platform.c -o build/e 
-# gcc $CommonFlags -fPIC -shared -lutf8proc tests.c -o build/tests.so
-# gcc $CommonFlags test_runner.c -pthread -ldl -o build/tests 
+gcc $CommonFlags -fPIC -shared -lutf8proc tests.c -o build/tests.so
+gcc $CommonFlags test_runner.c -pthread -ldl -o build/tests 
 
 # popd
 

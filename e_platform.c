@@ -283,7 +283,7 @@ int main(int argc, char **argv)
     sigemptyset(&mask);
     sigaddset(&mask, SIGWINCH);
     sigaddset(&mask, SIGSEGV);
-    sigaddset(&mask, SIGKILL);
+    sigaddset(&mask, SIGTERM);
 
     sigprocmask(SIG_BLOCK, &mask, NULL);
 
@@ -325,8 +325,7 @@ int main(int argc, char **argv)
     fds[1].fd = ifd;
     fds[1].events = POLLIN;
 
-    /* window dimension change signel */ 
-
+    /* window dimension change signal */ 
     fds[2].fd = sfd;
     fds[2].events = POLLIN;
 
@@ -400,7 +399,10 @@ int main(int argc, char **argv)
 
             if (fds[2].revents & POLLIN)
             {
+                fprintf(stderr, "here\n");
                 struct signalfd_siginfo si;
+
+                // fprintf(stderr, "signal number = %d\n", si.ssi_code)
 
                 int n = read(sfd, &si, sizeof(si));
                 if (n == -1)
@@ -409,13 +411,25 @@ int main(int argc, char **argv)
                     return -1;
                 }
                 
-                if (si.ssi_code == SIGSEGV)
+                if (si.ssi_signo == SIGSEGV)
                 {
                     break;
                 }
+
+                if (si.ssi_signo == SIGTERM)
+                {
+                    fprintf(stderr, "caught term signal\n");
+                    break;
+                }
+
+                if (si.ssi_signo == SIGWINCH)
+                {
+                }
+
             }
         }
     }
+    reset_mode();
 
     printf("Listening for events stopped.\n");
     close(ifd);

@@ -6,6 +6,8 @@ typedef struct offset
     u32 col;
 } offset;
 
+#define INLINE_THRESHOLD 8
+
 typedef struct piece
 {
     u32 size;
@@ -13,7 +15,8 @@ typedef struct piece
     union
     {
         offset off;
-        u8 data[8]; // This path is not yet implemented and may never be!! 
+        u8 data[INLINE_THRESHOLD]; 
+                    // This path is not yet implemented and may never be?!! 
                     // The idea would be to inline text inside the piece itself if, 
                     // it is smaller than some threshold value.
                     //
@@ -22,11 +25,10 @@ typedef struct piece
                     // to the pieces is not layed out one after the other in their corresponding buffers.
                     // If we were to inline the text in the pieces we would bypass the buffer indirection.
                     //
-                    //  
-                    // 
                     // What to do if an edit makes a piece whose size was bigger than threshold, 
                     // smaller than the threshold.
-                    // Possible rules.
+                    //
+                    // Possible rules:
                     //
                     // 1> if a sequence of insert mode edits results in a piece whose size is 
                     // less than or equal to the threshold, that piece gets inlined.
@@ -35,7 +37,7 @@ typedef struct piece
                     // We shall not remove the copied text from the buffer, since there may exist 
                     // undo pieces which reference it.
                     //
-                    // 2> An edit of an inlined piece results in an inlined pieces 
+                    // 2> An edit of an inlined piece results in inlined pieces 
                     // (A normal mode edit of a piece never increases its size.
                     // 
                     // 3> if an edit of a non-inlined piece results in insertion of 

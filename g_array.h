@@ -1,6 +1,6 @@
 #include <stdlib.h>
 
-#define G_INIT_CAPACITY 256
+#define G_INIT_CAPACITY 32
 
 typedef struct g_header
 {
@@ -9,7 +9,6 @@ typedef struct g_header
 } g_header;
 
 #define g_get_header(arr) ((g_header *) (arr) - 1)
-
 #define g_len(arr) ((g_header *)(arr) - 1)->count
 
 #define g_set_len(arr, len) ((g_header *)(arr) - 1)->count = (len);
@@ -62,4 +61,5 @@ typedef struct g_header
     } while (0);
 
 #define g_free(arr) free((g_header *)(arr) - 1)
+// #define g_clear(arr) 
 

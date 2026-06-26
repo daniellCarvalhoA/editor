@@ -71,14 +71,27 @@ static void set_window_params(window *win, screen *screen, layout layout)
         u16 screen_y   = get_screen_y(screen, win);
         u16 screen_x   = get_screen_x(screen, win);
         // TODO: realloc 
-        win->view = default_grid_view(&screen->grid, win_height, win_width);
-        u32 line_start = screen_y * screen->cols;
-        for (u32 i = 0; i < win_height; ++i)
-        {
-            win->view.grid_lines[i] = line_start + (i * screen->cols) + screen_x;
-        }
+        win->view = default_grid_view(&screen->grid, screen_y, screen_x, win_height, win_width);
+        // u32 line_start = screen_y * screen->cols;
+        // for (u32 i = 0; i < win_height; ++i)
+        // {
+        //     win->view.grid_lines[i] = line_start + (i * screen->cols) + screen_x;
+        // }
     }
 }
+
+// static void free_v(window *root)
+// {
+//     if (root)
+//     {
+//         free_view(&root->view);
+//         window *child;
+//         list_for_each_entry(child, &root->first_child, sibling)
+//         {
+//             free_v(child);
+//         }
+//     }
+// }
 
 static window *create_first_window(screen *screen, layout layout) 
 {
@@ -500,7 +513,7 @@ static void draw_borders(screen *screen, window *win)
              window *prev = 0;
              window *child;
 
-             u16 w_width   = get_width(screen, win); 
+             u16 w_width    = get_width(screen, win); 
              u16 w_screen_x = get_screen_x(screen, win);
              list_for_each_entry(child, &win->first_child, sibling)
              {
@@ -1155,9 +1168,6 @@ static void attach_window(screen *screen, window *new, window *old, layout layou
     }
 
     update_layout(screen, parent);
-    set_color(screen, 32);
-    draw_borders(screen, screen->root_window);
-    reset_color(screen);
 }
 
 static inline void map_buffer_to_window(piece_list *buffer, window *window)
@@ -1183,15 +1193,17 @@ static inline void reset_window_cursor(screen *screen, window *win)
 static void render_command_window(screen *screen)
 {
     window *win = screen->command_window;
-    u16 w_height   = get_height(screen, win);
-    u16 w_width    = get_width(screen, win);
+    u16 w_height = get_height(screen, win);
+    u16 w_width  = get_width(screen, win);
+    u16 screen_x = get_screen_x(screen, win);
+    u16 screen_y = get_screen_y(screen, win);
 
 
     if (win->change & Render_BufferChange)
     {
         multilevel_grid m_grid;
         initialize_multilevel_grid(&m_grid, w_height, w_width);
-        grid_view new_view = default_grid_view(&m_grid, w_height, w_width);
+        grid_view new_view = default_grid_view(&m_grid, screen_y, screen_x, w_height, w_width);
 
         fill_command_grid(screen, win, new_view);
         grid_diff(screen, win, win->view, new_view);
@@ -1236,7 +1248,10 @@ static void render_window(window *win, screen *screen, b32 is_active)
         multilevel_grid m_grid;
         initialize_multilevel_grid(&m_grid, w_height, w_width);
 
-        grid_view new_view = default_grid_view(&m_grid, w_height, w_width);
+        u16 screen_x = get_screen_x(screen, win);
+        u16 screen_y = get_screen_y(screen, win);
+
+        grid_view new_view = default_grid_view(&m_grid, screen_y, screen_x, w_height, w_width);
 
         fill_grid(screen, win, new_view);
 
@@ -1269,6 +1284,9 @@ static void process_layout(editor_state *editor, u8 *input, u32 input_size)
                 window *new_window = create_from(&editor->screen, NULL);
                 map_buffer_to_window(active_window->buffer, new_window);
                 attach_window(&editor->screen, new_window, NULL, Horizontal, 0);
+                set_color(&editor->screen, 32);
+                draw_borders(&editor->screen, editor->screen.root_window);
+                reset_color(&editor->screen);
             }
         } break;
 
@@ -1279,6 +1297,9 @@ static void process_layout(editor_state *editor, u8 *input, u32 input_size)
                 window *new_window = create_from(&editor->screen,  NULL);
                 map_buffer_to_window(active_window->buffer, new_window);
                 attach_window(&editor->screen, new_window, NULL, Vertical, 0);
+                set_color(&editor->screen, 32);
+                draw_borders(&editor->screen, editor->screen.root_window);
+                reset_color(&editor->screen);
             }
         } break;
 

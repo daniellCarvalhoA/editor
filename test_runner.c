@@ -5,7 +5,6 @@
 #include <semaphore.h>
 
 #include "e.h"
-#include "g_array.h"
 #include "prng.c"
 
 #define NUM_TESTS 1000
@@ -54,24 +53,40 @@ typedef struct work_queue
 static WORK_QUEUE_CALLBACK(do_test_work)
 {
     void *code = dlopen("/home/paula/c/e/build/tests.so", RTLD_LAZY);
-    function_test *test = (function_test *) dlsym(code, test_name);
-    log->test_index = test_index;
-
-    entropy_src entropy;
-    initialize_entropy(&entropy, true);
-    for (u32 i = 0; i < NUM_TESTS; ++i)
+    if (code)
     {
-        log->seed = seed(&entropy);
-        prng p;
-        // if (strcmp(test_name, "rows") == 0)
-        // {
-        //     // fprintf(stderr, "seed: %lu\n", log->seed);
-        // }
-        from_system_entropy(&entropy, &p);
-        test(&p);
+        function_test *test = (function_test *) dlsym(code, test_name);
+        if (test)
+        {
+            log->test_index = test_index;
+
+            entropy_src entropy;
+            initialize_entropy(&entropy, true);
+            for (u32 i = 0; i < NUM_TESTS; ++i)
+            {
+                log->seed = seed(&entropy);
+                prng p;
+                // if (strcmp(test_name, "rows") == 0)
+                // {
+                //     // fprintf(stderr, "seed: %lu\n", log->seed);
+                // }
+                // Is there a need to go to the os here, 
+                // maybe call next on the prng, reseed??
+                from_system_entropy(&entropy, &p);
+                test(&p);
+            }
+            free_entropy(&entropy);
+            fprintf(stderr, "%lu - TEST (pid: %lu), %s PASSED\n", log->test_index, (u64) getpid(), test_name);
+        }
+        else
+        {
+            // fprintf(stderr, "symbol : %s, not present in dll\n", test_name);
+        }
     }
-    free_entropy(&entropy);
-    fprintf(stderr, "%lu - TEST (pid: %lu), %s PASSED\n", log->test_index, (u64) getpid(), test_name);
+    else
+    {
+        fprintf(stderr, "unable to load dll\n");
+    }
 }
 
 static ADD_WORK_ENTRY(add_entry)
@@ -351,6 +366,8 @@ int main(int argc, char **argv) {
             u32 seed_len = str_len(argv[2]);
             u64 seed = parse_seed((u8 *) argv[2], seed_len);
 
+
+
             string name = { .buffer = (u8 *) argv[3], .len = str_len(argv[3]) };;
 
             with_seed_entry(seed, name, test_code.code);
@@ -439,6 +456,7 @@ int main(int argc, char **argv) {
             {
             } else if (WIFEXITED(status))
             {
+                // fprintf(stderr, "fuck pid : %u\n, status = %d\n", pid, WTERMSIG(status));
             }
         }
         for (u32 i = 0; i < g_len(functions); ++i)

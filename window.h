@@ -20,6 +20,7 @@ typedef enum
     GreaterThan
 } ord;
 
+
 static inline ord compare(win_cursor a, win_cursor b)
 {
     ord result;
@@ -46,6 +47,25 @@ static inline ord compare(win_cursor a, win_cursor b)
     {
         result = LessThan;
     }
+    return result;
+}
+
+static inline win_cursor minimum(win_cursor a, win_cursor b)
+{
+    win_cursor result;
+    switch (compare(a, b))
+    {
+        case LessThan:
+        case EqualTo:
+        {
+            result = a;
+        } break;
+        case GreaterThan:
+        {
+            result = b;
+        } break;
+    }
+
     return result;
 }
 

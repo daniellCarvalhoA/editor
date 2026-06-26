@@ -495,10 +495,10 @@ static inline void fix_iter(base_iter *iter)
 {
     if (iter->pos_in_piece + iter->piece_pos >= iter->node->size)
     {
-        iter->abs_idx   += iter->node->count;
+        iter->abs_idx   += iter->node->count - iter->piece_idx;
         iter->node_line += iter->node->lcnt;
         iter->node_pos  += iter->node->size;
-        iter->piece_idx  = iter->piece_line = iter->piece_pos = iter->pos_in_piece = 0;
+        iter->piece_idx  = iter->piece_line = iter->piece_pos = iter->pos_in_piece = iter->line_in_piece = 0 ;
         iter->node       = iter->node->next;
     } 
     else if (iter->pos_in_piece >= iter->node->pieces[iter->piece_idx].size)
@@ -802,10 +802,10 @@ static inline b32 base_next_cell_(base_iter *iter)
     {
         if (iter->pos_in_piece + iter->piece_pos >= iter->node->size)
         {
-            iter->abs_idx   += iter->node->count;
+            iter->abs_idx   += iter->node->count - iter->piece_idx;
             iter->node_line += iter->node->lcnt;
             iter->node_pos  += iter->node->size;
-            iter->piece_idx  = iter->piece_line = iter->piece_pos = iter->pos_in_piece = 0;
+            iter->piece_idx  = iter->piece_line = iter->piece_pos = iter->pos_in_piece = iter->line_in_piece = 0;
             iter->node       = iter->node->next;
         } 
         else if (iter->pos_in_piece >= iter->node->pieces[iter->piece_idx].size)

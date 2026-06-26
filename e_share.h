@@ -4,8 +4,16 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include "g_array.h"
 #define Assert(expression) if(!(expression))\
   { fprintf(stderr, "Assert failed in: %d of file: %s\n", __LINE__, __FILE__); *(int *)0 = 0; }
+
+struct point
+{
+    u32 x;
+    u32 y;
+};
+
 
 #define TEST(name) 
 

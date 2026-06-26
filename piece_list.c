@@ -1050,17 +1050,18 @@ static void redo(piece_list *list)
     }
 }
 
-static void undo_(piece_list *list)
+static void undo_(window *win)
 {
+    piece_list *list = win->buffer;
     undo_node **curr_node = &list->undo_history.curr_node;
 
     if (*curr_node)
     {
         // swap cursor positions;
-        u32 prev_cx = active_window->bcx;
-        u32 prev_cy = active_window->bcy;
-        active_window->bcx = (*curr_node)->cx;
-        active_window->bcy = (*curr_node)->cy;
+        u32 prev_cx = win->bcx;
+        u32 prev_cy = win->bcy;
+        win->bcx = (*curr_node)->cx;
+        win->bcy = (*curr_node)->cy;
         (*curr_node)->cx = prev_cx;
         (*curr_node)->cy = prev_cy;
 
@@ -1116,194 +1117,239 @@ static void undo_(piece_list *list)
     }
 }
 
-static void replace_range_(
-    piece_list *list,
-    base_iter start,
-    base_iter end,
-    piece *pieces,
-    buffer_type *types,
-    u32 num_pieces)
+// static void replace_range_(
+//     piece_list *list,
+//     base_iter start,
+//     base_iter end,
+//     piece *pieces,
+//     buffer_type *types,
+//     u32 num_pieces)
+// {
+//     list->num_pieces += num_pieces;
+//
+//     piece *start_piece = get_piece_(&start);
+//     piece *end_piece   = get_piece_(&end);
+//
+//     buffer_type *start_type = get_type_(&start);
+//     buffer_type *end_type   = get_type_(&end);
+//
+//     u32 start_size = start_piece ? start_piece->size : UINT32_MAX;
+//
+//     u32 num_undo_pieces = 
+//         (end.abs_idx + (end.pos_in_piece > 0)) - 
+//         (start.abs_idx + (start.pos_in_piece == start_size));
+//
+//     undo_memory_header *undo_header = allocate_undo_memory_block(
+//         &list->undo_history,
+//         &list->history_arena,
+//         num_undo_pieces);
+//
+//     undo_header->abs_idx   = start.abs_idx + (start.pos_in_piece == start_size);
+//     undo_header->ins_count = num_pieces;
+//     undo_header->del_count = num_undo_pieces;
+//
+//     slice_cursor slice_cursor = {};
+//     get_slice_cursor_from_header(&slice_cursor, undo_header);
+//
+//     for (u32 i = 0; i < num_pieces; ++i)
+//     {
+//         piece piece = pieces[i];
+//         list->size += piece.size;
+//         list->lcnt += piece.lcnt;
+//     }
+//
+//     u32 num_lines_deleted = line_number(&end) - line_number(&start);
+//     u32 num_chars_deleted = position(&end) - position(&start);
+//
+//     list->size -= num_chars_deleted;
+//     list->lcnt -= num_lines_deleted;
+//
+//     cursor start_cursor = { start.node, start.piece_idx };
+//     cursor end_cursor   = { end.node, end.piece_idx };
+//
+//     if (start_piece == end_piece && start.pos_in_piece > 0 && end.pos_in_piece < end_piece->size)
+//     {
+//         list->num_pieces++;
+//
+//         copy_slice(&slice_cursor, start_piece, start_type, 1);
+//
+//         offset offset = get_offset(&end);
+//
+//         piece right = { 
+//             .size = start_piece->size - end.pos_in_piece,
+//             .lcnt = start_piece->lcnt - end.line_in_piece,
+//             .off  = offset
+//         };
+//
+//         start_cursor.node->size -= start_piece->size - start.pos_in_piece;
+//         start_cursor.node->lcnt -= start_piece->lcnt - start.line_in_piece;
+//
+//         start_piece->size = start.pos_in_piece;
+//         start_piece->lcnt = start.line_in_piece;
+//
+//         add_to_cursor(list, &start_cursor, 1);
+//
+//         start_cursor = make_space_for_at(list, start_cursor, num_pieces + 1);
+//
+//         piece *all_pieces[2] =  { pieces, &right };
+//         buffer_type *all_types[2]  =  { types, start_type };
+//
+//         u32 count[2] = { num_pieces, 1 };
+//
+//         for (u32 i = 0; i < ArrayCount(all_pieces); ++i)
+//         {
+//             u32 slice_count  = count[i];
+//             u32 slice_cursor = 0;
+//
+//             piece *piece_slice      = all_pieces[i];
+//             buffer_type *type_slice = all_types[i];
+//
+//             while (slice_cursor < slice_count)
+//             {
+//                 piece *src_pieces      = piece_slice + slice_cursor;
+//                 buffer_type *src_types = type_slice  + slice_cursor;
+//
+//                 piece *dst_pieces      = start_cursor.node->pieces  + start_cursor.piece_index;
+//                 buffer_type *dst_types = start_cursor.node->b_types + start_cursor.piece_index;
+//
+//                 u32 remaining = slice_count - slice_cursor;
+//                 u32 copy_amount = Minimum(remaining, (start_cursor.node->count - start_cursor.piece_index));
+//
+//                 memcpy(dst_pieces, src_pieces, sizeof(piece)       * copy_amount);
+//                 memcpy(dst_types,  src_types,  sizeof(buffer_type) * copy_amount);
+//
+//                 for (u32 j = 0; j < copy_amount; ++j)
+//                 {
+//                     piece piece = src_pieces[j];
+//                     start_cursor.node->size += piece.size;
+//                     start_cursor.node->lcnt += piece.lcnt;
+//                 }
+//
+//                 if (start_cursor.node->count == start_cursor.piece_index + copy_amount)
+//                 {
+//                     start_cursor.node = start_cursor.node->next;
+//                     start_cursor.piece_index = 0;
+//                 }
+//                 else
+//                 {
+//                     start_cursor.piece_index += copy_amount;
+//                 }
+//                 slice_cursor += copy_amount;
+//             }
+//         }
+//         undo_header->ins_count += 2;
+//     }
+//     else
+//     {
+//         if (start.pos_in_piece > 0)
+//         {
+//             if (start.pos_in_piece < start_piece->size)
+//             {
+//                  write_start(&slice_cursor, *start_piece, *start_type);
+//
+//                  start_cursor.node->size -= start_piece->size - start.pos_in_piece;
+//                  start_cursor.node->lcnt -= start_piece->lcnt - start.line_in_piece;
+//
+//                  start_piece->size = start.pos_in_piece;
+//                  start_piece->lcnt = start.line_in_piece;
+//
+//                  undo_header->ins_count++;
+//             }
+//             add_to_cursor(list, &start_cursor, 1);
+//             start.abs_idx++;
+//         }
+//
+//         if (end.pos_in_piece > 0)
+//         {
+//             if (end.pos_in_piece < end_piece->size)
+//             {
+//                 write_last(&slice_cursor, *end_piece, *end_type);
+//
+//                 end_cursor.node->size -= end.pos_in_piece;
+//                 end_cursor.node->lcnt -= end.line_in_piece;
+//
+//                 end_piece->off = get_offset(&end);
+//                 end_piece->size -= end.pos_in_piece;
+//                 end_piece->lcnt -= end.line_in_piece;
+//                 undo_header->ins_count++;
+//             }
+//             else
+//             {
+//                 add_to_cursor(list, &end_cursor, 1);
+//                 end.abs_idx++;
+//             }
+//         }
+//
+//         u32 num_pieces_deleted = end.abs_idx - start.abs_idx;
+//         list->num_pieces -= num_pieces_deleted;
+//
+//         u32 count = end.abs_idx - start.abs_idx;
+//
+//         if (count)
+//         {
+//             copy_range(start_cursor, end_cursor, count, &slice_cursor);
+//         }
+//
+//         if (count + num_pieces > 0)
+//         {
+//             replace(list, start_cursor, end_cursor, pieces, types, num_pieces);
+//         }
+//     }
+//
+//     insert_at_current(
+//         &list->undo_history,
+//         &list->history_arena,
+//         undo_header,
+//         active_window->bcx,
+//         active_window->bcy);
+//
+//     reset_cursor_(&list->iter);
+// }
+
+typedef struct
 {
-    list->num_pieces += num_pieces;
+    u32 num_copied_pieces;
+    piece       *copied_pieces;
+    buffer_type *copied_types;
+} copied;
 
-    piece *start_piece = get_piece_(&start);
-    piece *end_piece   = get_piece_(&end);
 
-    buffer_type *start_type = get_type_(&start);
-    buffer_type *end_type   = get_type_(&end);
+static inline u32 num_deleted_pieces(base_iter start, base_iter end)
+{
+    Assert(position(&start) <= position(&end));
+    u32 result = 0;
 
-    u32 start_size = start_piece ? start_piece->size : UINT32_MAX;
-
-    u32 num_undo_pieces = 
-        (end.abs_idx + (end.pos_in_piece > 0)) - 
-        (start.abs_idx + (start.pos_in_piece == start_size));
-
-    undo_memory_header *undo_header = allocate_undo_memory_block(
-        &list->undo_history,
-        &list->history_arena,
-        num_undo_pieces);
-
-    undo_header->abs_idx   = start.abs_idx + (start.pos_in_piece == start_size);
-    undo_header->ins_count = num_pieces;
-    undo_header->del_count = num_undo_pieces;
-
-    slice_cursor slice_cursor = {};
-    get_slice_cursor_from_header(&slice_cursor, undo_header);
-
-    for (u32 i = 0; i < num_pieces; ++i)
+    if (position(&start) != position(&end))
     {
-        piece piece = pieces[i];
-        list->size += piece.size;
-        list->lcnt += piece.lcnt;
+        u32 end_idx   = end.abs_idx + (end.pos_in_piece != 0);
+        u32 start_idx = start.abs_idx + (start.pos_in_piece != get_piece_(&start)->size);
+        result = end_idx - start_idx;
+
     }
-
-    u32 num_lines_deleted = line_number(&end) - line_number(&start);
-    u32 num_chars_deleted = position(&end) - position(&start);
-
-    list->size -= num_chars_deleted;
-    list->lcnt -= num_lines_deleted;
-
-    cursor start_cursor = { start.node, start.piece_idx };
-    cursor end_cursor   = { end.node, end.piece_idx };
-
-    if (start_piece == end_piece && start.pos_in_piece > 0 && end.pos_in_piece < end_piece->size)
-    {
-        list->num_pieces++;
-
-        copy_slice(&slice_cursor, start_piece, start_type, 1);
-
-        offset offset = get_offset(&end);
-
-        piece right = { 
-            .size = start_piece->size - end.pos_in_piece,
-            .lcnt = start_piece->lcnt - end.line_in_piece,
-            .off  = offset
-        };
-
-        start_cursor.node->size -= start_piece->size - start.pos_in_piece;
-        start_cursor.node->lcnt -= start_piece->lcnt - start.line_in_piece;
-
-        start_piece->size = start.pos_in_piece;
-        start_piece->lcnt = start.line_in_piece;
-
-        add_to_cursor(list, &start_cursor, 1);
-
-        start_cursor = make_space_for_at(list, start_cursor, num_pieces + 1);
-
-        piece *all_pieces[2] =  { pieces, &right };
-        buffer_type *all_types[2]  =  { types, start_type };
-
-        u32 count[2] = { num_pieces, 1 };
-
-        for (u32 i = 0; i < ArrayCount(all_pieces); ++i)
-        {
-            u32 slice_count  = count[i];
-            u32 slice_cursor = 0;
-
-            piece *piece_slice      = all_pieces[i];
-            buffer_type *type_slice = all_types[i];
-
-            while (slice_cursor < slice_count)
-            {
-                piece *src_pieces      = piece_slice + slice_cursor;
-                buffer_type *src_types = type_slice  + slice_cursor;
-
-                piece *dst_pieces      = start_cursor.node->pieces  + start_cursor.piece_index;
-                buffer_type *dst_types = start_cursor.node->b_types + start_cursor.piece_index;
-
-                u32 remaining = slice_count - slice_cursor;
-                u32 copy_amount = Minimum(remaining, (start_cursor.node->count - start_cursor.piece_index));
-
-                memcpy(dst_pieces, src_pieces, sizeof(piece)       * copy_amount);
-                memcpy(dst_types,  src_types,  sizeof(buffer_type) * copy_amount);
-
-                for (u32 j = 0; j < copy_amount; ++j)
-                {
-                    piece piece = src_pieces[j];
-                    start_cursor.node->size += piece.size;
-                    start_cursor.node->lcnt += piece.lcnt;
-                }
-
-                if (start_cursor.node->count == start_cursor.piece_index + copy_amount)
-                {
-                    start_cursor.node = start_cursor.node->next;
-                    start_cursor.piece_index = 0;
-                }
-                else
-                {
-                    start_cursor.piece_index += copy_amount;
-                }
-                slice_cursor += copy_amount;
-            }
-        }
-        undo_header->ins_count += 2;
-    }
-    else
-    {
-        if (start.pos_in_piece > 0)
-        {
-            if (start.pos_in_piece < start_piece->size)
-            {
-                 write_start(&slice_cursor, *start_piece, *start_type);
-
-                 start_cursor.node->size -= start_piece->size - start.pos_in_piece;
-                 start_cursor.node->lcnt -= start_piece->lcnt - start.line_in_piece;
-
-                 start_piece->size = start.pos_in_piece;
-                 start_piece->lcnt = start.line_in_piece;
-
-                 undo_header->ins_count++;
-            }
-            add_to_cursor(list, &start_cursor, 1);
-            start.abs_idx++;
-        }
-
-        if (end.pos_in_piece > 0)
-        {
-            if (end.pos_in_piece < end_piece->size)
-            {
-                write_last(&slice_cursor, *end_piece, *end_type);
-
-                end_cursor.node->size -= end.pos_in_piece;
-                end_cursor.node->lcnt -= end.line_in_piece;
-
-                end_piece->off = get_offset(&end);
-                end_piece->size -= end.pos_in_piece;
-                end_piece->lcnt -= end.line_in_piece;
-                undo_header->ins_count++;
-            }
-            else
-            {
-                add_to_cursor(list, &end_cursor, 1);
-                end.abs_idx++;
-            }
-        }
-
-        u32 num_pieces_deleted = end.abs_idx - start.abs_idx;
-        list->num_pieces -= num_pieces_deleted;
-
-        u32 count = end.abs_idx - start.abs_idx;
-
-        if (count)
-        {
-            copy_range(start_cursor, end_cursor, count, &slice_cursor);
-        }
-
-        if (count + num_pieces > 0)
-        {
-            replace(list, start_cursor, end_cursor, pieces, types, num_pieces);
-        }
-    }
-
-    insert_at_current(
-        &list->undo_history,
-        &list->history_arena,
-        undo_header,
-        active_window->bcx,
-        active_window->bcy);
-
-    reset_cursor_(&list->iter);
+    return result;
 }
+
+// static inline copied get_copied_from_undo(undo_memory_header *header, base_iter start, base_iter end)
+// {
+    // copied result = {};
+    // result.num_copied_pieces = 
+    //
+    // u32 copied_size  = get_data_size(header);
+    //
+    // void *data_start = get_data_start(header);
+    //
+    // void *copied_data = malloc(copied_size);
+
+    // memcpy(copied_data, 
+
+
+
+    // piece *piecs = get_pieces_from_header(
+
+//
+    // return result;
+
+// }
 
 static undo_memory_header *replace_range(
     piece_list *list,
@@ -1323,14 +1369,11 @@ static undo_memory_header *replace_range(
 
     u32 start_size = start_piece ? start_piece->size : UINT32_MAX;
 
-    u32 num_undo_pieces = 
-        (end.abs_idx + (end.pos_in_piece > 0)) - 
-        (start.abs_idx + (start.pos_in_piece == start_size));
+    u32 num_undo_pieces = (end.abs_idx + (end.pos_in_piece > 0)) - 
+                          (start.abs_idx + (start.pos_in_piece == start_size));
 
-    undo_memory_header *undo_header = allocate_undo_memory_block(
-        &list->undo_history,
-        &list->history_arena,
-        num_undo_pieces);
+    undo_memory_header *undo_header = 
+        allocate_undo_memory_block(&list->undo_history, &list->history_arena, num_undo_pieces);
 
     undo_header->abs_idx   = start.abs_idx + (start.pos_in_piece == start_size);
     undo_header->ins_count = num_pieces;
@@ -1355,8 +1398,18 @@ static undo_memory_header *replace_range(
     cursor start_cursor = { start.node, start.piece_idx };
     cursor end_cursor   = { end.node, end.piece_idx };
 
+    // u32 deleted_count = num_deleted_pieces(start, end);
+
     if (start_piece == end_piece && start.pos_in_piece > 0 && end.pos_in_piece < end_piece->size)
     {
+        // if (deleted_count > 0)
+        // {
+        //     piece erased = {
+        //         .size = end.pos_in_piece - start.pos_in_piece,
+        //         .lcnt = end.line_in_piece - start.line_in_piece,
+        //         .off  = get_offset(&start)
+        //     };
+        // }
         list->num_pieces++;
 
         copy_slice(&slice_cursor, start_piece, start_type, 1);
@@ -1483,10 +1536,6 @@ static undo_memory_header *replace_range(
     return undo_header;
 }
 
-
-
-
-
 static undo_memory_header *range_replace(
     piece_list *list, 
     u32 cy_0,
@@ -1547,6 +1596,7 @@ static void initialize_piece_list(piece_list *list, u8 *original_text, u32 origi
     list->wrapped = false;
 
     base_init_(list, Position, &list->iter);
+    INIT_LIST_HEAD(&list->window_sentinel);
 }
 
 static void init_buffer(piece_list *list, char *filepath)
@@ -1564,7 +1614,6 @@ static void init_buffer(piece_list *list, char *filepath)
     }
 
     initialize_piece_list(list, original_text, original_text_len);
-    INIT_LIST_HEAD(&list->window_sentinel);
 }
 
 static void write_buffer_to_file(piece_list *list)
@@ -1572,8 +1621,7 @@ static void write_buffer_to_file(piece_list *list)
     if (list->filepath)
     {
         platform_file_handle handle = Platform.OpenFile(list->filepath);
-        // This call may not be available, maybe have a query call 
-        // that asks the platform.
+        // This call may not be available, maybe have a query call that asks the platform.
         Platform.AllocateDiskSpace(&handle, 0, list->size);
 
         for (segmented_node *node = list->root_sentinel.next;

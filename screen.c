@@ -1,6 +1,6 @@
 static inline grid_view screen_view(screen *screen)
 {
-    grid_view result = default_grid_view(&screen->grid, screen->rows, screen->cols);
+    grid_view result = default_grid_view(&screen->grid, 0, 0, screen->rows, screen->cols);
     return result;
 }
 static void flush_buffer(screen *screen)
@@ -208,16 +208,24 @@ static inline void initialize_screen(screen *screen)
 
     // attach_window(screen, 
 
-    attach_window(screen, screen->command_window, active_window, Vertical, 1);
+    attach_window(screen, screen->command_window, screen->root_window, Vertical, 1);
     screen->command_window->c_buffer = allocate_command_buffer(screen->cols);
 
+}
 
-
-
-
-
+static void free_screen(screen *screen)
+{
+    if (screen)
+    {
+        free_multilevel_grid(&screen->grid);
+    }
+    free_command_buffer(&screen->command_window->c_buffer);
+    // free_v(screen->root_window);
+    free_arena(&screen->render_arena);
 
 }
+
+
 
 
 
