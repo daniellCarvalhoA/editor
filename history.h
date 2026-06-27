@@ -7,6 +7,34 @@ typedef struct undo_memory_header
     struct undo_memory_header *next;
 } undo_memory_header;
 
+typedef struct undo_memory_block
+{
+    struct undo_memory_block *next; 
+    memory_index size;             
+
+} undo_memory_block;
+
+typedef struct undo_node 
+{
+    struct undo_node *next; 
+    struct undo_node *prev;
+    struct undo_node *first_child;
+    struct undo_node *last_child;
+    struct undo_node *parent;
+
+    u32 cx;
+    u32 cy;
+
+    undo_memory_header *data;
+} undo_node;
+
+typedef struct history
+{
+    undo_node *root;
+    undo_node *curr_node;
+    undo_memory_block *first_block;
+} history;
+
 static b32 headers_are_equal(undo_memory_header *a, undo_memory_header *b)
 {
     if (!a)
@@ -26,13 +54,6 @@ static b32 headers_are_equal(undo_memory_header *a, undo_memory_header *b)
     b32 result  = same_idx && (same_ins_count) && same_del_count && same_next;
     return result;
 }
-
-typedef struct undo_memory_block
-{
-    struct undo_memory_block *next; 
-    memory_index size;             
-
-} undo_memory_block;
 
 static b32 blocks_are_equal(undo_memory_block *a, undo_memory_block *b)
 {
@@ -56,29 +77,9 @@ static b32 blocks_are_equal(undo_memory_block *a, undo_memory_block *b)
 // an editing session exceeds 2 ^ 32 -1, non contiguous edits, 
 // even 2 ^ 16 - 1 is a bit much;
 //
-// We could get the pointer to the a node, by adding its index 
+// We could get the pointer to the a node by adding its index 
 // to the start of the memory block, and then casting.
 
-// typedef struct
-// {
-//
-// } undo_data 
-
-
-typedef struct undo_node 
-{
-    struct undo_node *next; 
-    struct undo_node *prev;
-    struct undo_node *first_child;
-    struct undo_node *last_child;
-    struct undo_node *parent;
-
-    // u32 pos;
-    u32 cx;
-    u32 cy;
-
-    undo_memory_header *data;
-} undo_node;
 
 static b32 trees_are_equal(undo_node *a, undo_node *b)
 {
@@ -102,18 +103,12 @@ static b32 trees_are_equal(undo_node *a, undo_node *b)
     return result;
 }
 
-typedef struct history
-{
-    undo_node *root;
-    undo_node *curr_node;
-    undo_memory_block *first_block;
-} history;
 
 static inline b32 histories_are_equal(history a, history b)
 {
     b32 roots_are_equal = trees_are_equal(a.root, b.root);
-    b32 curr_is_equal = trees_are_equal(a.curr_node, b.curr_node);
-    b32 equal_blocks = blocks_are_equal(a.first_block, b.first_block);
+    b32 curr_is_equal   = trees_are_equal(a.curr_node, b.curr_node);
+    b32 equal_blocks    = blocks_are_equal(a.first_block, b.first_block);
     b32 result =  roots_are_equal && curr_is_equal && equal_blocks;
     return result;
 }

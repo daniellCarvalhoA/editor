@@ -102,10 +102,6 @@ typedef struct piece_list
     u32 size;  
     u32 lcnt;
 
-    u32 line_len;
-    u32 cx;
-    u32 cy;
-
     base_iter iter;
 
     buffer original;
@@ -119,6 +115,7 @@ typedef struct piece_list
 
     undo_node *staged;
 
+    u32 num_windows;
     dlist window_sentinel;
     dlist list;
 

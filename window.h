@@ -77,19 +77,6 @@ typedef enum
     Horizontal,
 } layout;
 
-typedef enum
-{
-    Render_NoChange               = 0x0,
-    Render_BufferChange           = 0x1,
-    Render_ScrollChange           = 0x2,
-    Render_LayoutChange           = 0x4,
-    Render_ModeChange             = 0x8,
-    Render_StatusChange           = 0x10,
-    Render_FocusChange            = 0x20,
-    Render_VisualModeCursorChange = 0x40,
-    Render_StatusVisibilityChange = 0x80,
-    Render_BufferExchange         = 0x100,
-} render_change;
 
 typedef enum
 {
@@ -106,7 +93,7 @@ typedef struct window
 
     u16 offset;
     u16 full_dim;
-    u16 dyn_dim;
+    u16 fixed_dim;
     // Cursor position relative to the window top-left corner
     u16 cx;
     u16 cy;
@@ -217,13 +204,13 @@ static inline u16 get_dyn_height(screen *screen, window *win)
 
             default:
             {
-                result = win->dyn_dim;
+                result = win->full_dim - win->fixed_dim;
             } break;
         }
     }
     else
     {
-        result = win->dyn_dim;
+        result = screen->rows - win->fixed_dim;
     }
     return result;
 }

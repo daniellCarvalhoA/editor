@@ -44,18 +44,6 @@ static void initialize_editor(editor_state *state, char *filepath)
 {
     initialize_screen(&state->screen);
 
-    // active_window = state->screen.root_window;
-    //
-    // // state->root_window = create_first_window(&state->screen, LeafBuffer);
-    // // active_window = state->root_window;
-    //
-    // window *command_window = create_window(&state->screen, LeafCommand, WinFlags_Fixed);
-    // state->command_window = command_window;
-    // attach_window(&state->screen, &state->root_window, command_window, active_window, Vertical, 1);
-    //
-    // state->command_window->c_buffer = allocate_command_buffer(state->screen.cols);
-
-
     piece_list *buffer = create_buffer(&state->arena, filepath);
     map_buffer_to_window(buffer, active_window);
 
@@ -65,6 +53,19 @@ static void initialize_editor(editor_state *state, char *filepath)
     set_color(&state->screen, 32);
     draw_borders(&state->screen, state->screen.root_window);
     reset_color(&state->screen);
+}
+
+extern UPDATE_WINDOW_DIM(update_window_dim)
+{
+    Platform = memory->Platform;
+    editor_state *editor = memory->editor;
+    if (editor)
+    {
+        update_window_size(&editor->screen);
+        editor->screen.change |= Render_LayoutChange;
+        render(editor);
+        editor->screen.change = Render_NoChange;
+    }
 }
 
 extern UPDATE_AND_RENDER(update_and_render)
@@ -97,7 +98,10 @@ extern UPDATE_AND_RENDER(update_and_render)
             {
                 if (active_window == editor->screen.command_window)
                 {
-                    parse_command(editor, input, input_size);
+                    if (parse_command(editor, input, input_size))
+                    {
+                        return true;
+                    }
                 }
                 else
                 {

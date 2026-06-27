@@ -38,7 +38,7 @@ mode edit_mode = Normal;
 
 static const char *mode_str()
 {
-    const char *result;
+    const char *result = 0;
     switch (edit_mode)
     {
         case Layout:

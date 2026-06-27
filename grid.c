@@ -78,7 +78,7 @@ static void fill_grid(screen *screen, window *win, grid_view grid)
                 not_over = false;
                 break;
             }
-            grid_line g_line = get_grid_line(grid, line - win->top_line);
+            grid_line g_line = get_grid_line(grid, (line - win->top_line));
 
             if ((u8) item.cell == '\n')
             {
@@ -242,7 +242,7 @@ static void grid_diff(screen *screen, window *win, grid_view old, grid_view new)
         grid_line old_line = get_grid_line(old, i);
         grid_line new_line = get_grid_line(new, i);
 
-        old_line.line_start += old.width * new.y_offset + new.x_offset;
+        old_line.line_start += screen->cols * new.y_offset + new.x_offset;
 
         set_cursor_column(screen, screen_x);
         line_diff(screen, win, old_line, new_line); 

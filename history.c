@@ -1,10 +1,10 @@
-static inline b32 is_header_empty(const undo_memory_header *header)
+inline b32 is_header_empty(const undo_memory_header *header)
 {
     b32 result = (header->ins_count == 0) && (header->del_count == 0);
     return result;
 }
 
-static inline u32 get_data_size(const undo_memory_header *header)
+inline u32 get_data_size(const undo_memory_header *header)
 {
     u32 result = header->del_count * (sizeof(piece) + sizeof(buffer_type));
     return result;
@@ -83,9 +83,7 @@ static undo_memory_block *find_block_for_size(
     undo_memory_block **prev)
 {
     undo_memory_block *result = 0;
-    for (undo_memory_block *block = history->first_block;
-        block;
-        block = block->next)
+    for (undo_memory_block *block = history->first_block; block; block = block->next)
     {
         if (block->size >= size)
         {
@@ -99,8 +97,8 @@ static undo_memory_block *find_block_for_size(
 
 static inline memory_index get_size_for_undo_data(const u32 del_count)
 {
-    memory_index result = 
-        sizeof(undo_memory_header) + del_count * sizeof(piece) + del_count *sizeof(buffer_type);
+    // memory_index result = sizeof(undo_memory_header) + del_count * sizeof(piece) + del_count * sizeof(buffer_type);
+    memory_index result = sizeof(undo_memory_header) + del_count * (sizeof(piece) + sizeof(buffer_type));
     return result;
 }
 

@@ -21,11 +21,38 @@ static platform_api Platform;
 static struct termios term;
 static struct termios old_term;
 
+PLATFORM_GET_TERMINAL_HANDLE(LinuxGetTerminalHandle)
+{
+    platform_terminal_handle handle = { (void *) 1 };
+    return handle;
+}
+
+PLATFORM_GET_TERMINAL_DIM(LinuxGetTerminalDim)
+{
+    struct window_size {
+        u16 ws_row;
+        u16 ws_col;
+        u16 xpixel;
+        u16 ypixel;
+    } win;
+
+    int t_fd = (int)((u64) handle.handle); 
+    i32 n = ioctl(t_fd, TIOCGWINSZ, &win);
+    if (n == - 1)
+    {
+        perror("ioctl");
+        abort();
+    }
+
+    platform_window_dim dim = { .width = win.ws_col, .height = win.ws_row };
+    return dim;
+}
+
 PLATFORM_OPEN_FILE(LinuxOpenFile)
 {
     platform_file_handle result = { .no_errors = true};
 
-    i32 fd = open(filepath, O_RDWR);
+    i32 fd = open(filepath, O_RDWR| O_CREAT, S_IWUSR|S_IRUSR|S_IRGRP|S_IWGRP|S_IROTH);
     if (fd == -1)
     {
         result.no_errors = false;
@@ -340,14 +367,15 @@ int main(int argc, char **argv)
     Assert(written == ArrayCount(clear_screen));
 
     editor_memory memory = allocate_editor_memory();
-
-    linux_e_code code = load_code(src_code_dll_fullpath);
+    linux_e_code code    = load_code(src_code_dll_fullpath);
 
     memory.Platform.OpenFile          = LinuxOpenFile;
     memory.Platform.ReadDataFromFile  = LinuxReadFromFile;
     memory.Platform.CloseFile         = LinuxCloseFile;
     memory.Platform.AllocateDiskSpace = LinuxAllocateDiskSpace;
     memory.Platform.WriteGather       = LinuxWriteGather;
+    memory.Platform.GetTerminalDim    = LinuxGetTerminalDim;
+    memory.Platform.GetTerminalHandle = LinuxGetTerminalHandle;
 
     Platform = memory.Platform;
 
@@ -418,12 +446,12 @@ int main(int argc, char **argv)
 
                 if (si.ssi_signo == SIGTERM)
                 {
-                    fprintf(stderr, "caught term signal\n");
                     break;
                 }
 
                 if (si.ssi_signo == SIGWINCH)
                 {
+                    code.update_window_dim(&memory);
                 }
 
             }

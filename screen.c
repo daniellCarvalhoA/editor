@@ -164,6 +164,25 @@ static void rotate(u32 left, u16 *mid, u32 right)
     }
 }
 
+// static inline  
+
+static inline void update_window_size(screen *screen)
+{
+    platform_terminal_handle handle = Platform.GetTerminalHandle();
+    platform_window_dim dim = Platform.GetTerminalDim(handle);
+    screen->rows = dim.height;
+    screen->cols = dim.width;
+
+    resize_multilevel_grid(&screen->grid, screen->rows, screen->cols);
+
+    update_layout(screen, screen->root_window);
+    set_color(screen, 32);
+    draw_borders(screen, screen->root_window);
+    reset_color(screen);
+    // draw_borders(screen, screen->root_window);
+}
+
+
 
 static inline void reset_window_size(screen *screen)
 {
@@ -185,21 +204,27 @@ static inline void reset_window_size(screen *screen)
     screen->cols = win.ws_col;
 }
 
-static inline void reset_screen_diff_bounds(screen *screen)
-{
-    screen->left = UINT16_MAX;
-    screen->top = UINT16_MAX;
-    screen->right = 0; 
-    screen->bot = 0;
-}
+// static inline void reset_screen_diff_bounds(screen *screen)
+// {
+//     screen->left = UINT16_MAX;
+//     screen->top = UINT16_MAX;
+//     screen->right = 0; 
+//     screen->bot = 0;
+// }
 
 static inline void initialize_screen(screen *screen)
 {
     initialize_arena_with_size(&screen->render_arena, 8 * 4096);
-    reset_window_size(screen);
+
+    platform_terminal_handle handle = Platform.GetTerminalHandle();
+    platform_window_dim dim = Platform.GetTerminalDim(handle);
+    screen->rows = dim.height;
+    screen->cols = dim.width;
+
+    // reset_window_size(screen);
 
     initialize_multilevel_grid(&screen->grid, screen->rows, screen->cols);
-    reset_screen_diff_bounds(screen);
+    // reset_screen_diff_bounds(screen);
     INIT_LIST_HEAD(&screen->first_free_window);
 
     screen->root_window    = create_first_window(screen, LeafBuffer);

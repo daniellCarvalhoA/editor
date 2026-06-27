@@ -41,14 +41,16 @@ static inline void set_window_vertical_dim(window *win, u16 y, u16 height)
 {
     Assert(!win->parent || win->parent->layout == Vertical);
     win->offset = y;
-    win->full_dim = win->dyn_dim = height;
+    // win->full_dim = win->dyn_dim = height;
+    win->full_dim = height;
 }
 
 static inline void set_window_horizontal_dim(window *win, u16 x, u16 width)
 {
     Assert(!win->parent || win->parent->layout == Horizontal);
     win->offset = x;
-    win->full_dim = win->dyn_dim = width;
+    // win->full_dim = win->dyn_dim = width;
+    win->full_dim = width;
 }
 
 static window *create_from(screen *screen, window *old)
@@ -810,6 +812,7 @@ static void update_layout(screen *screen, window *root)
     {
         case Vertical:
         {
+            // u16 total_height      = get_dyn_height(screen, root) - num_separators;
             u16 total_height      = get_dyn_height(screen, root) - num_separators;
             u16 height_per_window = total_height / (root->num_children - root->num_fixed);
             u16 rem               = total_height % (root->num_children - root->num_fixed);;
@@ -894,12 +897,15 @@ static void update_layout(screen *screen, window *root)
     }
 }
 
-static b32 close_active_window(screen *screen)
+static void close_active_window(screen *screen)
 {
-    b32 result = false;
     Assert(active_window->layout == LeafBuffer);
 
     window *parent = active_window->parent;
+
+    piece_list *buffer = active_window->buffer;
+    Assert(buffer->num_windows > 0);
+    buffer->num_windows--;
 
     if (parent->num_children - parent->num_fixed > 2)
     {
@@ -942,11 +948,15 @@ static b32 close_active_window(screen *screen)
         }
     }
 
+    if (buffer->num_windows == 0)
+    {
+        list_del(&buffer->list);
+    }
+
+
     // clean_borders(screen, screen->root_window);
     update_layout(screen, screen->root_window);
     draw_borders(screen, screen->root_window);
-
-    return result;
 }
 
 
@@ -1099,12 +1109,14 @@ static void attach_window(screen *screen, window *new, window *old, layout layou
         {
             case Vertical:
             {
-                parent->full_dim = parent->dyn_dim = get_height(screen, parent);
+                // parent->full_dim = parent->dyn_dim = get_height(screen, parent);
+                parent->full_dim = get_height(screen, parent);
             } break;
 
             case Horizontal:
             {
-                parent->full_dim = parent->dyn_dim = get_width(screen, parent);
+                // parent->full_dim = parent->dyn_dim = get_width(screen, parent);
+                parent->full_dim = get_width(screen, parent);
             } break;
 
             default:
@@ -1161,9 +1173,11 @@ static void attach_window(screen *screen, window *new, window *old, layout layou
 
     if (new->flags & WinFlags_Fixed)
     {
-        Assert(fixed_dim < parent->dyn_dim - parent->num_children);
-        new->full_dim    = new->dyn_dim = fixed_dim;
-        parent->dyn_dim -= (new->full_dim + 1);
+        Assert(fixed_dim < parent->full_dim - (parent->fixed_dim + parent->num_children));
+        // new->full_dim    = new->dyn_dim = fixed_dim;
+        new->full_dim    = fixed_dim;
+        // parent->dyn_dim -= (new->full_dim + 1);
+        parent->fixed_dim = (new->full_dim + 1);
         parent->num_fixed++;
     }
 
@@ -1174,6 +1188,7 @@ static inline void map_buffer_to_window(piece_list *buffer, window *window)
 {
     list_add_tail(&window->next_in_buffer, &buffer->window_sentinel);
     window->buffer = buffer;
+    buffer->num_windows++;
 }
 
 static inline void reset_window_cursor(screen *screen, window *win)
@@ -1243,7 +1258,7 @@ static void render_window(window *win, screen *screen, b32 is_active)
         }
     }
 
-    if (win->buffer->changed || win->change != Render_NoChange)
+    if (win->buffer->changed || win->change != Render_NoChange || screen->change != Render_NoChange)
     {
         multilevel_grid m_grid;
         initialize_multilevel_grid(&m_grid, w_height, w_width);

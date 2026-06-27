@@ -482,7 +482,6 @@ static void insert_mode_delete(window *win)
 
     win->dcx = win->bcx - 1;
     win->bcx = win->dcx;
-    list->line_len--;
 }
 
 static b32 process_insert(u8 *input, u32 input_size)

@@ -301,7 +301,7 @@ static void move_to(piece_list *list, u32 position)
         base_advance_pos_by(&list->iter, position - last_position);
     }
 
-    list->cy = get_line_number(&list->iter);
+    // list->cy = get_line_number(&list->iter);
 
     // base_iter start_line_iter = find_line(&list->iter, list->cy);
     // u32 start_line_pos        = get_position(&start_line_iter);
@@ -1556,8 +1556,6 @@ static undo_memory_header *range_replace(
 static void initialize_piece_list(piece_list *list, u8 *original_text, u32 original_text_len)
 {
     DLIST_INIT(&list->root_sentinel);
-    list->cx          = 0;
-    list->cy          = 0;
     // list->pos         = 0;
     list->num_pieces  = 0;
     list->size        = 0;
@@ -1607,10 +1605,18 @@ static void init_buffer(piece_list *list, char *filepath)
     if (list->filepath)
     {
         platform_file_handle handle = Platform.OpenFile(filepath);
-        original_text_len = handle.size;
-        original_text = (u8 *) PushArray(&list->list_arena, handle.size, u8, NoClear());
-        Platform.ReadDataFromFile(&handle, 0, handle.size, original_text);
-        Platform.CloseFile(handle);
+        if (handle.no_errors)
+        {
+            original_text_len = handle.size;
+            original_text = (u8 *) PushArray(&list->list_arena, handle.size, u8, NoClear());
+            Platform.ReadDataFromFile(&handle, 0, handle.size, original_text);
+            Platform.CloseFile(handle);
+        }
+        else
+        {
+            perror("open 1");
+            abort();
+        }
     }
 
     initialize_piece_list(list, original_text, original_text_len);
@@ -1621,28 +1627,36 @@ static void write_buffer_to_file(piece_list *list)
     if (list->filepath)
     {
         platform_file_handle handle = Platform.OpenFile(list->filepath);
-        // This call may not be available, maybe have a query call that asks the platform.
-        Platform.AllocateDiskSpace(&handle, 0, list->size);
-
-        for (segmented_node *node = list->root_sentinel.next;
-            node != &list->root_sentinel;
-            node = node->next)
+        if (handle.no_errors)
         {
-            platform_scatter_gather_vector iov[node->count];
+            // This call may not be available, maybe have a query call that asks the platform.
+            Platform.AllocateDiskSpace(&handle, 0, list->size);
 
-            for (u32 i = 0; i < node->count; ++i)
+            for (segmented_node *node = list->root_sentinel.next;
+                node != &list->root_sentinel;
+                node = node->next)
             {
-                piece piece = node->pieces[i];
-                buffer_type type = node->b_types[i];
+                platform_scatter_gather_vector iov[node->count];
 
-                const buffer *buffer = get_buffer_2(list, type);
-                u32 offset = buffer->lines[piece.off.row] + piece.off.col;
-                iov[i].base = (void *) (buffer->text + offset);
-                iov[i].size = piece.size;
+                for (u32 i = 0; i < node->count; ++i)
+                {
+                    piece piece = node->pieces[i];
+                    buffer_type type = node->b_types[i];
+
+                    const buffer *buffer = get_buffer_2(list, type);
+                    u32 offset = buffer->lines[piece.off.row] + piece.off.col;
+                    iov[i].base = (void *) (buffer->text + offset);
+                    iov[i].size = piece.size;
+                }
+                Platform.WriteGather(&handle, iov, node->count);
             }
-            Platform.WriteGather(&handle, iov, node->count);
+            Platform.CloseFile(handle);
         }
-        Platform.CloseFile(handle);
+        else
+        {
+            perror("open");
+            abort();
+        }
     }
 }
 

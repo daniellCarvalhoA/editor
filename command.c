@@ -176,11 +176,9 @@ static parse_tree parse_command_tree(command_buffer *buffer)
 }
 
 
-
-
-
-static void process_command(editor_state *state)
+static b32 process_command(editor_state *state)
 {
+    b32 result = false;
     parse_tree p_tree = parse_command_tree(&state->screen.command_window->c_buffer);
 
     if (p_tree.flags & ParseFlags_Save)
@@ -219,17 +217,22 @@ static void process_command(editor_state *state)
     {
         Assert(!(p_tree.flags & ParseFlags_Open));
 
-        b32 should_quit = close_active_window(&state->screen);
-        fprintf(stderr, "shoudl_quit = %u\n", should_quit);
+        close_active_window(&state->screen);
+
+        result = list_is_empty(&state->buffers);
+
     }
     clear_buffer(&state->screen.command_window->c_buffer);
     state->screen.command_window->bcx = 0;
 
+    return result;
+
 
 }
 
-static void parse_command(editor_state *state, u8 *input, u32 input_size)
+static b32 parse_command(editor_state *state, u8 *input, u32 input_size)
 {
+    b32 result = false;
     active_window->change |= Render_BufferChange;
     switch (*input)
     {
@@ -244,7 +247,7 @@ static void parse_command(editor_state *state, u8 *input, u32 input_size)
         case '\r':
         {
             active_window = interacting_window;
-            process_command(state);
+            result = process_command(state);
             clear_buffer(&state->screen.command_window->c_buffer);
         } break;
 
@@ -260,4 +263,5 @@ static void parse_command(editor_state *state, u8 *input, u32 input_size)
             active_window->bcx++;
         } break;
     }
+    return result;
 }

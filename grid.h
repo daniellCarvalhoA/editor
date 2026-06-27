@@ -154,12 +154,6 @@ typedef struct
     u8 *second_bit;
 } grid_bitmap;
 
-// typedef enum
-// {
-//     Default,
-//     Reversed,
-// } attr;
-
 typedef u8 attr;
 
 #define Default 0
@@ -203,6 +197,42 @@ static inline void free_multilevel_grid(multilevel_grid *grid)
     }
 }
 
+static inline void resize_multilevel_grid(
+    multilevel_grid *grid,
+    u32 new_rows, 
+    u32 new_cols) 
+{
+    u32 new_size = new_rows * new_cols;
+    grid->rows = new_rows;
+    grid->cols = new_cols;
+
+    grid->types = (grid_type *) realloc((void *) grid->types, new_size * sizeof(grid_type));
+    // memset(grid->types, U8, new_size * sizeof(grid_type));
+
+    grid->text_8 = (u8 *) realloc((void *) grid->text_8, new_size * sizeof(u8));
+    grid->attr   = (attr *) realloc((void *) grid->attr, new_size * sizeof(attr));
+    memset(grid->attr, 8, new_size * sizeof(attr));
+    // memset(grid->types, ' ', new_size * sizeof(u8));
+
+    if (grid->text_16)
+    {
+        free(grid->text_16);
+        grid->text_16 = 0;
+    }
+
+    if (grid->text_24)
+    {
+        free(grid->text_24);
+        grid->text_24 = 0;
+    }
+
+    if (grid->text_32_i)
+    {
+        free(grid->text_32_i);
+        grid->text_32_i = 0;
+    }
+}
+
 typedef struct 
 {
     multilevel_grid *grid;
@@ -210,19 +240,7 @@ typedef struct
     u16 x_offset;
     u16 height;
     u16 width;
-
-    // line *lines;
-    // u16 *grid_lines;
 } grid_view;
-
-// static void free_view(grid_view *view)
-// {
-//     if (view->grid_lines)
-//     {
-//         free(view->grid_lines);
-//     }
-// }
-//
 
 typedef struct
 {
@@ -238,14 +256,6 @@ static inline grid_view default_grid_view(
     u16 height,
     u16 width)
 {
-    // if (
-    // u16 *grid_lines = 
-    // u16 *grid_lines = (u16 *) malloc(sizeof(u16)  * height);
-    //
-    // for (u32 i = 0; i < height; ++i)
-    // {
-    //     grid_lines[i] = i * grid->cols;
-    // }
     
     grid_view result = {
         .grid  = grid,
@@ -253,7 +263,6 @@ static inline grid_view default_grid_view(
         .x_offset = x_offset,
         .height   = height,
         .width = width,
-        // .grid_lines = grid_lines,
     };
     return result;
 }
@@ -262,13 +271,10 @@ static inline grid_view default_grid_view(
 static inline void free_grid_view(grid_view view)
 {
     free_multilevel_grid(view.grid);
-    // free(view.grid_lines);
 }
 
 static inline grid_line get_grid_line(grid_view a, u16 line)
 {
-    // u32 line_start = a.grid_lines[line];
-    // u32 line_start = a.grid->cols * (a.y_offset + line); // + a.x_offset;
     u32 line_start = a.grid->cols * line; // + a.x_offset;
     grid_line result = { .grid = a.grid, .line_start = line_start, .width = a.grid->cols };
     return result;

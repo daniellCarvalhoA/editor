@@ -11,6 +11,7 @@ typedef struct linux_e_code
     time_t dll_last_write_time;
     char *one_past_last_exe_flineame_slash;
     UpdateAndRender *update_and_render;
+    UpdateWindowDimension *update_window_dim;
     b32 is_valid;
 } linux_e_code;
 
@@ -115,7 +116,8 @@ static linux_e_code load_code(char *src_dll_name)
 
         if (result.code)
         {
-            result.update_and_render = (UpdateAndRender *) dlsym(result.code, "update_and_render");
+            result.update_and_render = (UpdateAndRender *)       dlsym(result.code, "update_and_render");
+            result.update_window_dim = (UpdateWindowDimension *) dlsym(result.code, "update_window_dim");
             result.is_valid = result.update_and_render != 0;
         }
         else
