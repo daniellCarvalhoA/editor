@@ -178,13 +178,14 @@ static parse_tree parse_command_tree(command_buffer *buffer)
 
 static b32 process_command(editor_state *state)
 {
+    // window *active_window = state->screen.active_window;
     b32 result = false;
     parse_tree p_tree = parse_command_tree(&state->screen.command_window->c_buffer);
 
     if (p_tree.flags & ParseFlags_Save)
     {
         Assert(!(p_tree.flags & ParseFlags_Open));
-        write_buffer_to_file(active_window->buffer);
+        write_buffer_to_file(state->screen.active_window->buffer);
     }
 
     if (p_tree.flags & ParseFlags_Open)
@@ -196,21 +197,18 @@ static b32 process_command(editor_state *state)
         strncpy(filename_nullterminated, (const char *) p_tree.filename, p_tree.filename_size);
         filename_nullterminated[p_tree.filename_size] = '\0';
         
-        // TODO: Check if buffer is already loaded into memory.
+        // TODO!: Check if buffer is already loaded into memory.
         piece_list *buffer = create_buffer(&state->arena, filename_nullterminated);
 
-        // list_replace(&active_window->next_in_buffer, &buffer->list);
         list_add_tail(&buffer->list, &state->buffers);
 
-        list_del(&active_window->next_in_buffer);
-        // list_add(&active_window->next_in_buffer, &buffer->window_sentinel);
+        list_del(&state->screen.active_window->next_in_buffer);
 
-        map_buffer_to_window(buffer, active_window);
+        map_buffer_to_window(buffer, state->screen.active_window);
 
-        clear_window(active_window);
+        clear_window(state->screen.active_window);
 
-        active_window->change |= Render_BufferExchange;
-
+        state->screen.active_window->change |= Render_BufferExchange;
     }
 
     if (p_tree.flags & ParseFlags_Quit)
@@ -223,44 +221,45 @@ static b32 process_command(editor_state *state)
 
     }
     clear_buffer(&state->screen.command_window->c_buffer);
-    state->screen.command_window->bcx = 0;
+    state->screen.command_window->dc.x = 0;
 
     return result;
-
-
 }
 
 static b32 parse_command(editor_state *state, u8 *input, u32 input_size)
 {
     b32 result = false;
+    screen *screen = &state->screen;
+    window *active_window = screen->active_window;
+
     active_window->change |= Render_BufferChange;
     switch (*input)
     {
         case '\x1b':
         {
-            active_window = interacting_window;
-            clear_buffer(&state->screen.command_window->c_buffer);
-            active_window->bcx = 0;
-            active_window->bcy = 0;
+            screen->active_window = interacting_window;
+            clear_buffer(&screen->command_window->c_buffer);
+            active_window->bc.x = 0;
+            active_window->bc.y = 0;
         } break;
 
         case '\r':
         {
-            active_window = interacting_window;
+            screen->active_window = interacting_window;
             result = process_command(state);
-            clear_buffer(&state->screen.command_window->c_buffer);
+            clear_buffer(&screen->command_window->c_buffer);
         } break;
 
         case 127:
         {
-            pop(&state->screen.command_window->c_buffer);
-            active_window->bcx--;
+            pop(&screen->command_window->c_buffer);
+            active_window->dc.x--;
         } break;
 
         default:
         {
-            append_char(&state->screen.command_window->c_buffer, input, input_size);
-            active_window->bcx++;
+            append_char(&screen->command_window->c_buffer, input, input_size);
+            active_window->dc.x++;
         } break;
     }
     return result;

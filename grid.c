@@ -33,8 +33,9 @@ static void fill_command_grid(screen *screen, window *win, grid_view grid)
     }
 }
 
-static void fill_grid(screen *screen, window *win, grid_view grid)
+static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mode)
 {
+    window *active_window = screen->active_window;
     base_iter iter;
     b32 not_over = base_init_(win->buffer, LineNumber, &iter);
     // Assert(not_over);
@@ -46,8 +47,8 @@ static void fill_grid(screen *screen, window *win, grid_view grid)
     u32 height = get_height(screen, win);
     height = (win->flags & WinFlags_StatusLineVisible) ? (height - 1) : height;
 
-    win_cursor visual_cursor = { .x = win->vcx, .y = win->vcy }; 
-    win_cursor curr_cursor   = { .x = win->bcx, .y = win->bcy };
+    win_cursor visual_cursor = win->vc; // { .x = win->vcx, .y = win->vcy }; 
+    win_cursor curr_cursor   = win->bc; //{ .x = win->bcx, .y = win->bcy };
     win_range range = make_range(visual_cursor, curr_cursor);
     while (not_over && line < win->top_line + height)
     {
@@ -139,7 +140,7 @@ static void fill_grid(screen *screen, window *win, grid_view grid)
         u32 len = 0;
         if (win == active_window)
         {
-            const char *str_mode = mode_str();
+            const char *str_mode = mode_str(edit_mode);
             len = Minimum(width, strlen(str_mode));
             memcpy(data, (u8 *) str_mode, len);
         }
@@ -250,5 +251,6 @@ static void grid_diff(screen *screen, window *win, grid_view old, grid_view new)
         {
             write_string(screen, (u8 *) "\r\n", sizeof("\r\n") - 1);
         }
+        // flush_buffer(screen);
     }
 }

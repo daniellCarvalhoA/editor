@@ -3,6 +3,7 @@ static inline grid_view screen_view(screen *screen)
     grid_view result = default_grid_view(&screen->grid, 0, 0, screen->rows, screen->cols);
     return result;
 }
+
 static void flush_buffer(screen *screen)
 {
     ssize_t ret = write(1, screen->buffer, screen->cursor);
@@ -176,9 +177,10 @@ static inline void update_window_size(screen *screen)
     resize_multilevel_grid(&screen->grid, screen->rows, screen->cols);
 
     update_layout(screen, screen->root_window);
-    set_color(screen, 32);
-    draw_borders(screen, screen->root_window);
-    reset_color(screen);
+    screen->change |= Render_RedrawBorders;
+    // set_color(screen, 32);
+    // draw_borders(screen, screen->root_window);
+    // reset_color(screen);
     // draw_borders(screen, screen->root_window);
 }
 
@@ -216,11 +218,16 @@ static inline void initialize_screen(screen *screen)
 {
     initialize_arena_with_size(&screen->render_arena, 8 * 4096);
 
+#if TESTS
+    screen->rows = 40;
+    screen->cols = 40;
+#else
     platform_terminal_handle handle = Platform.GetTerminalHandle();
     platform_window_dim dim = Platform.GetTerminalDim(handle);
     screen->rows = dim.height;
     screen->cols = dim.width;
-
+// #else
+#endif
     // reset_window_size(screen);
 
     initialize_multilevel_grid(&screen->grid, screen->rows, screen->cols);
@@ -228,13 +235,14 @@ static inline void initialize_screen(screen *screen)
     INIT_LIST_HEAD(&screen->first_free_window);
 
     screen->root_window    = create_first_window(screen, LeafBuffer);
-    active_window = screen->root_window;
+    screen->active_window = screen->root_window;
     screen->command_window = create_window(screen, LeafCommand, WinFlags_Fixed);
 
     // attach_window(screen, 
 
     attach_window(screen, screen->command_window, screen->root_window, Vertical, 1);
     screen->command_window->c_buffer = allocate_command_buffer(screen->cols);
+    screen->change |= Render_RedrawBorders;
 
 }
 

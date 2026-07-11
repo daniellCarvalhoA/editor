@@ -4,7 +4,6 @@ static void commit_insert_mode_undo(piece_list *list)
     insert_mode *state = &list->i_state;
     if ((state->del_count > 0) || (state->ins_count))
     {
-
         undo_memory_header *header = allocate_undo_memory_block(
             &list->undo_history,
             &list->history_arena,
@@ -13,15 +12,14 @@ static void commit_insert_mode_undo(piece_list *list)
         header->abs_idx   = state->abs_idx;
         header->ins_count = state->ins_count;
         header->del_count = state->del_count;
+        header->ref_count = 1;
 
-        piece *pieces      = get_pieces_from_header(header);
-        buffer_type *types = get_types_from_header(header);
+        piece *pieces = get_pieces_from_header(header);
 
         list_piece *cursor;
         list_for_each_entry(cursor, &state->piece_head, list)
         {
             *(pieces++) = cursor->piece;
-            *(types ++) = cursor->type;
         }
 
         if (list->staged)
@@ -34,8 +32,8 @@ static void commit_insert_mode_undo(piece_list *list)
         {
             undo_node *new_node = allocate_tree_node(&list->history_arena);
             new_node->data = header;
-            new_node->cx = state->cx;
-            new_node->cy = state->cy;
+            new_node->bc.x = state->cx;
+            new_node->bc.y = state->cy;
             insert_node(&list->undo_history, new_node);
         }
     }
@@ -43,29 +41,18 @@ static void commit_insert_mode_undo(piece_list *list)
     clear(&state->insert_mode_arena);
 }
 
-static void normal_mode()
+static void normal_mode(window *win)
 {
-    commit_insert_mode_undo(active_window->buffer);
-    move_by_motion(active_window, Left, 1);
+    commit_insert_mode_undo(win->buffer);
+    move_by_motion(win, Left, 1, Normal);
 }
-
-// typedef struct insert_mode_undo
-// {
-//     u32 cx;
-//     u32 cy;
-//     u32 abs_idx;
-//     u32 ins_count;
-//     piece *piece;
-//     buffer_type *type;
-// } insert_mode_undo;
-
 
 static void insert_mode_insert(window *win, u8 *input, u32 input_size)
 {
-    // window *win        = active_window;
     piece_list *list   = win->buffer;
     u32 lines_inserted = (*input == '\n');
-    base_iter location = find_cursor(&list->iter, win->bcy, win->bcx);
+    base_iter location = find_cursor(&list->iter, win->bc);
+    // fix_iter(&location);
 
     insert_mode *state   = &list->i_state;
     segmented_node *node = location.node;
@@ -74,17 +61,15 @@ static void insert_mode_insert(window *win, u8 *input, u32 input_size)
     {
         case Init:
         {
-            list->num_pieces++;
+            // list->num_pieces++;
             state->state     = Inserted;
             state->position  = position(&location);
             state->abs_idx   = location.abs_idx;
             state->ins_count = 1;
-            state->cx = win->bcx;
-            state->cy = win->bcy;
+            state->cx = win->bc.x;
+            state->cy = win->bc.y;
 
             piece pieces[2]      = { make_piece(list, input, input_size) };
-            buffer_type types[2] = { BufferType_Append };
-
             cursor cursor = { node, location.piece_idx };
 
             if (location.pos_in_piece > 0)
@@ -96,21 +81,22 @@ static void insert_mode_insert(window *win, u8 *input, u32 input_size)
                 }
                 else 
                 {
-                    list->num_pieces++;
+                    // list->num_pieces++;
                     state->ins_count += 2;
                     state->del_count = 1;
 
-                    types[1]       = *get_type_(&location);
+                    // types[1]       = *get_type_(&location);
                     list_piece *lp = PushStruct(&state->insert_mode_arena, list_piece, NoClear());
 
                     lp->piece = *curr_piece;
-                    lp->type  = types[1];
+                    // lp->type  = types[1];
                     INIT_LIST_HEAD(&lp->list);
                     list_add(&lp->list, &state->piece_head);
 
                     pieces[1].off  = get_offset(&location);
                     pieces[1].size = curr_piece->size - location.pos_in_piece;
                     pieces[1].lcnt = curr_piece->lcnt - location.line_in_piece;
+                    pieces[1].type = curr_piece->type;
 
                     curr_piece->lcnt = location.line_in_piece;
                     curr_piece->size = location.pos_in_piece;
@@ -120,7 +106,7 @@ static void insert_mode_insert(window *win, u8 *input, u32 input_size)
                 }
                 add_to_cursor(list, &cursor, 1);
             }
-            replace(list, cursor, cursor, pieces, types, state->ins_count - state->del_count);
+            replace(list, cursor, cursor, pieces, state->ins_count - state->del_count);
             reset_cursor_(&list->iter);
         } break;
 
@@ -148,37 +134,36 @@ static void insert_mode_insert(window *win, u8 *input, u32 input_size)
             state->ins_count++;
             piece piece = make_piece(list, input, input_size); 
             // make_piece_from_char(list, c);
-            buffer_type type  = BufferType_Append;
 
             cursor cursor = { node, location.piece_idx };
             if (curr_piece && location.pos_in_piece == curr_piece->size)
             {
                 add_to_cursor(list, &cursor, 1);
             }
-            replace(list, cursor, cursor, &piece, &type, 1);
-            list->num_pieces++;
+            replace(list, cursor, cursor, &piece, 1);
+            // list->num_pieces++;
             reset_cursor_(&list->iter);
         } break;
     }
 
     list->changed        = true;
-    list->top_changed    = win->bcy;
+    list->top_changed    = win->bc.y;
     list->lines_inserted = lines_inserted;
-    list->bot_changed    = win->bcy + 1;
+    list->bot_changed    = win->bc.y + 1;
     list->size += input_size;
 
     if (lines_inserted)
     {
         list->lcnt++;
-        win->dcx = 0;
-        win->bcx = 0;
-        win->dcy = win->bcy + 1;
-        win->bcy = win->dcy;
+        win->dc.x = 0;
+        win->bc.x = 0;
+        win->dc.y = win->bc.y + 1;
+        win->bc.y = win->dc.y;
     }
     else
     {
-        win->dcx = win->bcx + 1;
-        win->bcx = win->dcx;
+        win->dc.x = win->bc.x + 1;
+        win->bc.x = win->dc.x;
     }
 }
 
@@ -188,11 +173,12 @@ static void insert_mode_delete(window *win)
     piece_list *list = win->buffer;
     insert_mode *state   = &list->i_state;
 
-    base_iter last_iter = find_cursor(&list->iter, win->bcy, win->bcx);
-    fix_iter(&last_iter);
+    base_iter last_iter = find_cursor(&list->iter, win->bc);
+    fix_iter_(&last_iter);
 
-    base_iter iter = find_cursor(&list->iter, win->bcy, win->bcx - 1);
-    fix_iter(&iter);
+    win_cursor prev_cursor = { .y = win->bc.y, .x = win->bc.x - 1 };
+    base_iter iter = find_cursor(&list->iter, prev_cursor);
+    fix_iter_(&iter);
 
     u32 del_size = position(&last_iter) - position(&iter);
 
@@ -206,15 +192,16 @@ static void insert_mode_delete(window *win)
             state->state    = Deleted;
             state->deleted  = true;
             state->position = position(&iter);
-            state->cx = win->bcx;
-            state->cy = win->bcy;
+            state->cx = win->bc.x;
+            state->cy = win->bc.y;
 
             piece *curr_piece = get_piece_(&iter);
-            buffer_type *type = get_type_(&iter);
+            if (!curr_piece)
+            {
+            }
             list_piece *lp = PushStruct(&list->i_state.insert_mode_arena, list_piece, NoClear());
 
             lp->piece = *curr_piece;
-            lp->type  = *type;
 
             INIT_LIST_HEAD(&lp->list);
             list_add(&lp->list, &list->i_state.piece_head);
@@ -225,12 +212,12 @@ static void insert_mode_delete(window *win)
             if (iter.pos_in_piece == 0)
             {
                 state->abs_idx = iter.abs_idx;
-                if (last_iter.pos_in_piece == 0 || last_iter.pos_in_piece == curr_piece->size)
+                if (last_iter.pos_in_piece == 0) // || last_iter.pos_in_piece == curr_piece->size)
                 {
                     cursor start_cursor = { node, iter.piece_idx };
                     cursor end_cursor   = add_to_cursor_by_value(list, start_cursor, 1);
-                    replace(list, start_cursor, end_cursor, 0, 0, 0);
-                    list->num_pieces--;
+                    replace(list, start_cursor, end_cursor, 0, 0);
+                    // list->num_pieces--;
                 } 
                 else
                 {
@@ -244,34 +231,34 @@ static void insert_mode_delete(window *win)
                     node->lcnt -= last_iter.line_in_piece;
                 }
             }
-            else if (iter.pos_in_piece == curr_piece->size)
-            {
-                state->abs_idx = iter.abs_idx + 1;
-
-                if (last_iter.pos_in_piece == 0 || last_iter.pos_in_piece == curr_piece->size)
-                {
-                    cursor start_cursor = { node, iter.piece_idx };
-                    add_to_cursor(list, &start_cursor, 1);
-                    cursor end_cursor = add_to_cursor_by_value(list, start_cursor, 1);
-                    replace(list, start_cursor, end_cursor, 0, 0, 0);
-                    list->num_pieces--;
-                } 
-                else
-                {
-                    state->ins_count = 1;
-
-                    curr_piece->off = get_offset(&last_iter);
-                    curr_piece->size -= last_iter.pos_in_piece;
-                    curr_piece->lcnt -= last_iter.line_in_piece;
-
-                    node->size -= last_iter.pos_in_piece;
-                    node->lcnt -= last_iter.line_in_piece;
-                }
-            } 
+            // else if (iter.pos_in_piece == curr_piece->size)
+            // {
+            //     state->abs_idx = iter.abs_idx + 1;
+            //
+            //     if (last_iter.pos_in_piece == 0 || last_iter.pos_in_piece == curr_piece->size)
+            //     {
+            //         cursor start_cursor = { node, iter.piece_idx };
+            //         add_to_cursor(list, &start_cursor, 1);
+            //         cursor end_cursor = add_to_cursor_by_value(list, start_cursor, 1);
+            //         replace(list, start_cursor, end_cursor, 0, 0);
+            //         list->num_pieces--;
+            //     } 
+            //     else
+            //     {
+            //         state->ins_count = 1;
+            //
+            //         curr_piece->off = get_offset(&last_iter);
+            //         curr_piece->size -= last_iter.pos_in_piece;
+            //         curr_piece->lcnt -= last_iter.line_in_piece;
+            //
+            //         node->size -= last_iter.pos_in_piece;
+            //         node->lcnt -= last_iter.line_in_piece;
+            //     }
+            // } 
             else
             {
                 state->abs_idx = iter.abs_idx;
-                if (last_iter.pos_in_piece == 0 || last_iter.pos_in_piece == curr_piece->size)
+                if (last_iter.pos_in_piece == 0)////////////// || last_iter.pos_in_piece == curr_piece->size)
                 {
                     state->ins_count = 1;
 
@@ -284,12 +271,13 @@ static void insert_mode_delete(window *win)
                 else
                 {
                     state->ins_count = 2;
-                    list->num_pieces++;
+                    // list->num_pieces++;
 
                     piece right;
                     right.off = get_offset(&last_iter);
                     right.size = curr_piece->size - last_iter.pos_in_piece;
                     right.lcnt = curr_piece->lcnt - last_iter.line_in_piece;
+                    right.type = curr_piece->type;
 
                     node->size -= curr_piece->size - iter.pos_in_piece;
                     node->lcnt -= curr_piece->lcnt - iter.line_in_piece;
@@ -299,7 +287,7 @@ static void insert_mode_delete(window *win)
 
                     cursor start_cursor = { node, iter.piece_idx };
                     add_to_cursor(list, &start_cursor, 1);
-                    replace(list, start_cursor, start_cursor, &right, type, 1);
+                    replace(list, start_cursor, start_cursor, &right, 1);
                 }
             }
         } break;
@@ -324,17 +312,17 @@ static void insert_mode_delete(window *win)
                     {
                         lp = list_first_entry(&state->piece_head, list_piece, list);
                     }
-                    replace(list, start_cursor, end_cursor, &lp->piece, &lp->type, state->del_count);
+                    replace(list, start_cursor, end_cursor, &lp->piece, state->del_count);
 
-                    list->num_pieces = (list->num_pieces + state->del_count) - state->ins_count;
+                    // list->num_pieces = (list->num_pieces + state->del_count) - state->ins_count;
                     clear_insert_state(state);
                 }
                 else
                 {
                     cursor end_cursor = add_to_cursor_by_value(list, start_cursor, 1);
-                    replace(list, start_cursor, end_cursor, 0, 0, 0);
+                    replace(list, start_cursor, end_cursor, 0, 0);
                     state->ins_count--;
-                    list->num_pieces--;
+                    // list->num_pieces--;
                 }
             }
             else
@@ -357,7 +345,6 @@ static void insert_mode_delete(window *win)
             state->position = position(&iter);
 
             piece *curr_piece = get_piece_(&iter);
-            buffer_type *type = get_type_(&iter);
 
             cursor start_cursor = { node, iter.piece_idx };
             cursor end_cursor   = { last_iter.node, last_iter.piece_idx };
@@ -368,22 +355,21 @@ static void insert_mode_delete(window *win)
                 {
                     list_piece *lp = PushStruct(&state->insert_mode_arena, list_piece, NoClear());
                     lp->piece = *curr_piece;
-                    lp->type  = *type;
                     INIT_LIST_HEAD(&lp->list);
                     list_add(&lp->list, &state->piece_head);
                     state->del_count++;
 
                     if (last_iter.pos_in_piece == 0) 
                     {
-                        replace(list, start_cursor, end_cursor, 0, 0, 0);
-                        list->num_pieces--;
+                        replace(list, start_cursor, end_cursor, 0, 0);
+                        // list->num_pieces--;
                     } 
-                    else if (last_iter.pos_in_piece == curr_piece->size)
-                    {
-                        add_to_cursor(list, &end_cursor, 1);
-                        replace(list, start_cursor, end_cursor, 0, 0, 0);
-                        list->num_pieces--;
-                    }
+                    // else if (last_iter.pos_in_piece == curr_piece->size)
+                    // {
+                    //     add_to_cursor(list, &end_cursor, 1);
+                    //     replace(list, start_cursor, end_cursor, 0, 0);
+                    //     list->num_pieces--;
+                    // }
                     else
                     {
                         curr_piece->size -= del_size;
@@ -396,13 +382,13 @@ static void insert_mode_delete(window *win)
                 }
                 else
                 {
-                    if (last_iter.pos_in_piece == curr_piece->size)
-                    {
-                        add_to_cursor(list, &end_cursor, 1);
-                    }
-                    replace(list, start_cursor, end_cursor, 0, 0, 0);
+                    // if (last_iter.pos_in_piece == curr_piece->size)
+                    // {
+                    //     add_to_cursor(list, &end_cursor, 1);
+                    // }
+                    replace(list, start_cursor, end_cursor, 0, 0);
                     state->ins_count--;
-                    list->num_pieces--;
+                    // list->num_pieces--;
                 }
             }
             else if (iter.pos_in_piece == curr_piece->size)
@@ -412,22 +398,21 @@ static void insert_mode_delete(window *win)
                 {
                     list_piece *lp = PushStruct(&state->insert_mode_arena, list_piece, NoClear());
                     lp->piece = *curr_piece;
-                    lp->type  = *type;
                     INIT_LIST_HEAD(&lp->list);
                     list_add(&lp->list, &state->piece_head);
                     state->del_count++;
 
                     if (last_iter.pos_in_piece == 0) 
                     {
-                        replace(list, start_cursor, end_cursor, 0, 0, 0);
-                        list->num_pieces--;
+                        replace(list, start_cursor, end_cursor, 0, 0);
+                        // list->num_pieces--;
                     } 
-                    else if (last_iter.pos_in_piece == curr_piece->size)
-                    {
-                        add_to_cursor(list, &end_cursor, 1);
-                        replace(list, start_cursor, end_cursor, 0, 0, 0);
-                        list->num_pieces--;
-                    }
+                    // else if (last_iter.pos_in_piece == curr_piece->size)
+                    // {
+                    //     add_to_cursor(list, &end_cursor, 1);
+                    //     replace(list, start_cursor, end_cursor, 0, 0);
+                    //     list->num_pieces--;
+                    // }
                     else
                     {
                         curr_piece->size -= del_size;
@@ -440,13 +425,13 @@ static void insert_mode_delete(window *win)
                 }
                 else
                 {
-                    if (last_iter.pos_in_piece == curr_piece->size)
-                    {
-                        add_to_cursor(list, &end_cursor, 1);
-                    }
-                    replace(list, start_cursor, end_cursor, 0, 0, 0);
+                    // if (last_iter.pos_in_piece == curr_piece->size)
+                    // {
+                    //     add_to_cursor(list, &end_cursor, 1);
+                    // }
+                    replace(list, start_cursor, end_cursor, 0, 0);
                     state->ins_count--;
-                    list->num_pieces--;
+                    // list->num_pieces--;
                 }
             } 
             else
@@ -456,7 +441,6 @@ static void insert_mode_delete(window *win)
                     state->abs_idx = iter.abs_idx;
                     list_piece *lp = PushStruct(&state->insert_mode_arena, list_piece, NoClear());
                     lp->piece = *curr_piece;
-                    lp->type  = *type;
                     INIT_LIST_HEAD(&lp->list);
                     list_add(&lp->list, &state->piece_head);
                     state->del_count++;
@@ -473,20 +457,21 @@ static void insert_mode_delete(window *win)
     reset_cursor_(&list->iter);
 
     list->changed = true;
-    list->top_changed   = win->bcy - num_lines_deleted;
+    list->top_changed   = win->bc.y - num_lines_deleted;
     list->lines_deleted = num_lines_deleted;
-    list->bot_changed   = win->bcy + 1;
+    list->bot_changed   = win->bc.y + 1;
 
     list->size -= del_size;
     list->lcnt -= num_lines_deleted;
 
-    win->dcx = win->bcx - 1;
-    win->bcx = win->dcx;
+    win->dc.x = win->bc.x - 1;
+    win->bc.x = win->dc.x;
 }
 
-static b32 process_insert(u8 *input, u32 input_size)
+static b32 process_insert(editor_state *state, u8 *input, u32 input_size)
 {
     b32 result = false;
+    window *active_window = state->screen.active_window;
     switch (*input)
     {
         case 'q':
@@ -496,7 +481,7 @@ static b32 process_insert(u8 *input, u32 input_size)
 
         case 127:
         {
-            if (active_window->bcx != 0)
+            if (active_window->bc.x != 0)
             {
                 insert_mode_delete(active_window);
             }
@@ -504,8 +489,8 @@ static b32 process_insert(u8 *input, u32 input_size)
 
         case '\x1b':
         {
-            normal_mode();
-            edit_mode = Normal;
+            normal_mode(active_window);
+            state->edit_mode = Normal;
             active_window->change |= Render_ModeChange;
         } break;
 

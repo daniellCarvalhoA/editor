@@ -4,12 +4,12 @@ inline b32 is_header_empty(const undo_memory_header *header)
     return result;
 }
 
+#if 0
 inline u32 get_data_size(const undo_memory_header *header)
 {
-    u32 result = header->del_count * (sizeof(piece) + sizeof(buffer_type));
+    u32 result = header->del_count * sizeof(piece);
     return result;
 }
-
 static inline void *get_data_start(const undo_memory_header *header)
 {
     void *result = 0;
@@ -19,23 +19,13 @@ static inline void *get_data_start(const undo_memory_header *header)
     }
     return result;
 }
-
+#endif
 static inline piece *get_pieces_from_header(const undo_memory_header *header) 
 {
     piece *result = 0;
     if (header->del_count)
     {
         result = (piece *) (header + 1);
-    }
-    return result;
-}
-
-static inline buffer_type *get_types_from_header(const undo_memory_header *header)
-{
-    buffer_type *result = 0;
-    if (header->del_count)
-    {
-        result = (buffer_type *) (get_pieces_from_header(header) + header->del_count);
     }
     return result;
 }
@@ -97,29 +87,27 @@ static undo_memory_block *find_block_for_size(
 
 static inline memory_index get_size_for_undo_data(const u32 del_count)
 {
-    // memory_index result = sizeof(undo_memory_header) + del_count * sizeof(piece) + del_count * sizeof(buffer_type);
-    memory_index result = sizeof(undo_memory_header) + del_count * (sizeof(piece) + sizeof(buffer_type));
+    memory_index result = sizeof(undo_memory_header) + del_count * sizeof(piece);
     return result;
 }
 
-static undo_memory_header *allocate_undo_memory_block(
+static void *allocate_memory_block(
     history *history,
     memory_arena *history_arena,
-    const u32 del_count)
+    memory_index size)
 {
-    memory_index size = get_size_for_undo_data(del_count);
+    void *result = 0;
 
-    undo_memory_header *data = 0;
     undo_memory_block *prev = 0;
     undo_memory_block *block = find_block_for_size(history, size, &prev);
-
     if (block)
     {
-        data = (undo_memory_header *) (block);
-        if ((block->size - size) >=  sizeof(undo_memory_block))
+        Assert(block->size >= size);
+        result = (void *) block;
+        if ((block->size - size) >= sizeof(undo_memory_block))
         {
-            undo_memory_block *remaining = (undo_memory_block *) (((u8 *) data) + size);
-            remaining->size = (block->size - size);
+            undo_memory_block *remaining = (undo_memory_block *) (((u8 *) result) + size);
+            remaining->size = block->size - size;
             block->size = size;
             LIST_REPLACE(prev, block, remaining, history->first_block);
         }
@@ -130,22 +118,47 @@ static undo_memory_header *allocate_undo_memory_block(
     }
     else
     {
-        data = (undo_memory_header *) push_size(history_arena, size, NoClear());
+        result = push_size(history_arena, size, NoClear());
+    }
+    return result;
+}
+
+static undo_memory_header *allocate_undo_memory_block(
+    history *history,
+    memory_arena *history_arena,
+    const u32 del_count)
+{
+    memory_index size = get_size_for_undo_data(del_count);
+
+    undo_memory_header *data = allocate_memory_block(history, history_arena, size);
+    if (!data)
+    {
+        abort();
     }
     data->next = 0;
     return data;
+}
+
+static inline void free_memory_block(history *history, void *ptr, memory_index block_size)
+{
+    undo_memory_block *block = (undo_memory_block *) ptr;
+    block->size = block_size;
+    block->next = 0;
+    insert_block(history, block);
 }
 
 static void free_undo_memory_block(history *history, undo_memory_header *header)
 {
     for (undo_memory_header *tmp = header; tmp;)
     {
+        Assert(tmp->ref_count > 0);
+        tmp->ref_count--;
         undo_memory_header *next = tmp->next;
-        memory_index size_of_block = get_size_for_undo_data(tmp->del_count);
-        undo_memory_block *block   = (undo_memory_block *) tmp;
-        block->size = size_of_block;
-        block->next = 0;
-        insert_block(history, block);
+        if (tmp->ref_count == 0)
+        {
+            memory_index size_of_block = get_size_for_undo_data(tmp->del_count);
+            free_memory_block(history, (void *) tmp, size_of_block);
+        }
         tmp = next;
     }
 }
@@ -188,13 +201,11 @@ static void insert_at_current(
     history *history,
     memory_arena *history_arena,
     undo_memory_header *data,
-    u32 cx,
-    u32 cy)
+    buffer_cursor bc)
 {
     undo_node *tree = allocate_tree_node(history_arena);
     tree->data = data;
-    tree->cx = cx;
-    tree->cy = cy;
+    tree->bc = bc;
 
     if (history->curr_node)
     {
@@ -220,21 +231,21 @@ static inline void append_to_current(history *history, undo_memory_header *data)
     LIST_INSERT(history->curr_node->data, data);
 }
 
-static inline undo_memory_header **undo_node_pop(history *history)
+static inline undo_node *undo_node_pop(history *history)
 {
-    undo_memory_header **result = 0;
+    undo_node *result = 0;
 
     if (history->curr_node)
     {
-        result = &history->curr_node->data;
+        result = history->curr_node;
         history->curr_node = history->curr_node->parent;
     }
     return result;
 }
 
-static inline undo_memory_header **undo_node_unpop(history *history)
+static inline undo_node *undo_node_unpop(history *history)
 {
-    undo_memory_header **result = 0;
+    undo_node *result = 0;
     if (history->root)
     {
         if (history->curr_node)
@@ -242,16 +253,15 @@ static inline undo_memory_header **undo_node_unpop(history *history)
             if (history->curr_node->first_child)
             {
                 history->curr_node = history->curr_node->first_child;
-                result = &history->curr_node->data;
+                result = history->curr_node;
             }
         }
         else
         {
-            result = &history->root->data;
+            result = history->root;
             history->curr_node = history->root;
         }
     }
     return result;
 }
-
 

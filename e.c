@@ -11,6 +11,7 @@
 #include "window.c"
 #include "screen.c"
 #include "command.c"
+#include "paste_buffer.c"
 #include "normal.c"
 #include "insert_mode.c"
 
@@ -22,7 +23,7 @@ static void render(editor_state *state)
         window *win;
         list_for_each_entry(win, &buffer->window_sentinel, next_in_buffer)
         {
-            render_window(win, &state->screen, win == active_window);
+            render_window(win, &state->screen, state->edit_mode);
         }
 
         buffer->changed        = false;
@@ -32,9 +33,19 @@ static void render(editor_state *state)
         buffer->lines_deleted  = 0;
     }
 
+    if (state->screen.change & Render_RedrawBorders)
+    {
+        set_color(&state->screen, 32);
+        draw_borders(&state->screen, state->screen.root_window);
+        reset_color(&state->screen);
+    }
+
+    state->screen.change = Render_NoChange;
+
     render_command_window(&state->screen);
 
-    reset_window_cursor(&state->screen, active_window);
+    reset_window_cursor(&state->screen, state->edit_mode);
+    window *active_window = state->screen.active_window;
     place_cursor(&state->screen, active_window->cy, active_window->cx);
 
     flush_buffer(&state->screen);
@@ -43,17 +54,16 @@ static void render(editor_state *state)
 static void initialize_editor(editor_state *state, char *filepath)
 {
     initialize_screen(&state->screen);
+    reset_parse_state(&state->p_state);
+    reset_paste_buffer(&state->p_buffer);
 
     piece_list *buffer = create_buffer(&state->arena, filepath);
-    map_buffer_to_window(buffer, active_window);
+    map_buffer_to_window(buffer, state->screen.active_window);
 
     INIT_LIST_HEAD(&state->buffers);
     list_add(&buffer->list, &state->buffers);
-
-    set_color(&state->screen, 32);
-    draw_borders(&state->screen, state->screen.root_window);
-    reset_color(&state->screen);
 }
+
 
 extern UPDATE_WINDOW_DIM(update_window_dim)
 {
@@ -84,11 +94,11 @@ extern UPDATE_AND_RENDER(update_and_render)
     }
     else
     {
-        switch (edit_mode)
+        switch (editor->edit_mode)
         {
             case Insert:
             {
-                if (process_insert(input, input_size))
+                if (process_insert(editor, input, input_size))
                 {
                     return true;
                 }
@@ -96,7 +106,7 @@ extern UPDATE_AND_RENDER(update_and_render)
 
             case Normal:
             {
-                if (active_window == editor->screen.command_window)
+                if (editor->screen.active_window == editor->screen.command_window)
                 {
                     if (parse_command(editor, input, input_size))
                     {
@@ -124,3 +134,5 @@ extern UPDATE_AND_RENDER(update_and_render)
     render(editor);
     return false;
 }
+
+

@@ -37,24 +37,31 @@ static b32 strictly_increasing(const u32 *buffer, const u32 count)
     return result;
 }
 
-static buffer *get_buffer(piece_list *list, const segmented_node *node, const u32 piece_index)
-{
-    switch (node->b_types[piece_index])
-    {
-        case BufferType_Append:
-        {
-            return &list->append;
-        } break;
-        case BufferType_Original:
-        {
-            return  &list->original;
-        } break;
-    }
-    return NULL;
-}
+// static buffer *get_buffer(buffer_type type, const segment
 
-static inline const buffer *get_buffer_2(const piece_list *list, const buffer_type type)
+// static buffer *get_buffer(piece_list *list, const segmented_node *node, const u32 piece_index)
+// {
+//     switch (node->b_types[piece_index])
+//     {
+//         case BufferType_Append:
+//         {
+//             return &list->append;
+//         } break;
+//         case BufferType_Original:
+//         {
+//             return  &list->original;
+//         } break;
+//     }
+//     return NULL;
+// }
+//
+static inline const buffer *get_buffer(const piece_list *list, const buffer_type type)
 {
+    // TODO: This might be called loads of times while rendering or writing to a file,
+    // Turn this if into an addition, put the Append buffer right after Original in memory, 
+    // and just add the buffer_type to the original to get the buffer you want.
+    //
+    // Morever, this branch is not predictable at all while rendering. Fow
     switch (type)
     {
         case BufferType_Append:

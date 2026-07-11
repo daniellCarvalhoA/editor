@@ -1,4 +1,11 @@
-#define MAX_PIECES_PER_NODE 32
+#define MAX_PIECES_PER_NODE 4
+
+typedef enum buffer_type
+{
+    BufferType_Append,
+    BufferType_Original,
+} buffer_type;
+
 
 typedef struct offset
 {
@@ -57,13 +64,8 @@ typedef struct piece
                     //   checking the size would not be the criteria.
                     //   We would have to add another enumerant to buffer_type.
     };
+    buffer_type type;
 } piece;
-
-typedef enum buffer_type
-{
-    BufferType_Append,
-    BufferType_Original,
-} buffer_type;
 
 typedef struct segmented_node
 {
@@ -71,7 +73,7 @@ typedef struct segmented_node
     u32 size;
     u32 lcnt;
     piece pieces[MAX_PIECES_PER_NODE];
-    buffer_type b_types[MAX_PIECES_PER_NODE];
+    // buffer_type b_types[MAX_PIECES_PER_NODE];
     struct segmented_node *next;
     struct segmented_node *prev;
 } segmented_node;

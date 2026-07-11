@@ -99,6 +99,12 @@ static inline void list_swap(dlist *entry_1, dlist *entry_2)
     list_add(entry_1, pos);
 }
 
+
+static inline int list_is_head(const struct dlist *list, const struct dlist *head)
+{
+	return list == head;
+}
+
 static inline void list_del_init(dlist *entry)
 {
     __list_del_entry(entry);
@@ -312,3 +318,13 @@ static inline void list_splice_tail_init(dlist *list, dlist *head)
 	for (pos = list_last_entry(head, typeof(*pos), member);		\
 	     &pos->member != (head); 					\
 	     pos = list_prev_entry(pos, member))
+
+
+#define list_entry_is_head(pos, head, member)				\
+	list_is_head(&pos->member, (head))
+
+#define list_for_each_entry_safe(pos, n, head, member)			\
+	for (pos = list_first_entry(head, typeof(*pos), member),	\
+		n = list_next_entry(pos, member);			\
+	     !list_entry_is_head(pos, head, member); 			\
+	     pos = n, n = list_next_entry(n, member))

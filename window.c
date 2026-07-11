@@ -57,7 +57,7 @@ static window *create_from(screen *screen, window *old)
 {
     if (!old)
     {
-        old = active_window;
+        old = screen->active_window;
     }
     window *new = create_window(screen, LeafBuffer, WinFlags_StatusLineVisible);
     new->top_line = old->top_line;
@@ -207,7 +207,8 @@ static u32 window_intersection_horizontal(
 // TODO: make count (i32) and make it go left if (count < 0)
 static void move_horizontal(screen *screen, u32 count, b32 right) 
 {
-    u32 y = active_window->cy;
+    window **active_window = &screen->active_window;
+    u32 y = (*active_window)->cy;
     window *horizontal_wins[64];
 
     u32 total = window_intersection_horizontal(screen, screen->root_window, y, horizontal_wins, 64);
@@ -215,7 +216,7 @@ static void move_horizontal(screen *screen, u32 count, b32 right)
     u32 active_index = UINT32_MAX;
     for (u32 i = 0; i < total; ++i)
     {
-        if (horizontal_wins[i] == active_window)
+        if (horizontal_wins[i] == *active_window)
         {
             active_index = i;
             break;
@@ -236,7 +237,7 @@ static void move_horizontal(screen *screen, u32 count, b32 right)
 
     if (horizontal_wins[next_window_index]->layout != LeafCommand)
     {
-        active_window = horizontal_wins[next_window_index];
+        *active_window = horizontal_wins[next_window_index];
     }
 
 
@@ -245,7 +246,8 @@ static void move_horizontal(screen *screen, u32 count, b32 right)
 
 static void move_vertical(screen *screen, u32 count, b32 down)
 {
-    u32 x = active_window->cx;
+    window **active_window = &screen->active_window;
+    u32 x = (*active_window)->cx;
     window *vertical_wins[64];
 
     u32 total = window_intersection_vertical(screen, screen->root_window, x, vertical_wins, 64);
@@ -253,7 +255,7 @@ static void move_vertical(screen *screen, u32 count, b32 down)
     u32 active_index = UINT32_MAX;
     for (u32 i = 0; i < total; ++i)
     {
-        if (vertical_wins[i] == active_window)
+        if (vertical_wins[i] == *active_window)
         {
             active_index = i;
             break;
@@ -274,7 +276,7 @@ static void move_vertical(screen *screen, u32 count, b32 down)
     if (vertical_wins[next_window_index]->layout != LeafCommand)
     {
 
-        active_window = vertical_wins[next_window_index];
+        *active_window = vertical_wins[next_window_index];
     }
 
     return;
@@ -899,35 +901,39 @@ static void update_layout(screen *screen, window *root)
 
 static void close_active_window(screen *screen)
 {
-    Assert(active_window->layout == LeafBuffer);
+    window **active_window = &screen->active_window;
+    Assert((*active_window)->layout == LeafBuffer);
 
-    window *parent = active_window->parent;
+    window *parent = (*active_window)->parent;
 
-    piece_list *buffer = active_window->buffer;
+    piece_list *buffer = (*active_window)->buffer;
     Assert(buffer->num_windows > 0);
     buffer->num_windows--;
 
     if (parent->num_children - parent->num_fixed > 2)
     {
-        dlist *new_active_window_list = active_window->sibling.next;
+        dlist *new_active_window_list = (*active_window)->sibling.next;
         if (new_active_window_list == &parent->first_child)
         {
             new_active_window_list = new_active_window_list->next;
         }
-        list_move(&active_window->sibling, &screen->first_free_window);
-        active_window = list_entry(new_active_window_list, window, sibling);
+        list_del(&(*active_window)->sibling);
+        list_del(&(*active_window)->next_in_buffer);
+        list_add(&(*active_window)->sibling, &screen->first_free_window);
+        // list_move(&(*active_window)->sibling, &screen->first_free_window);
+        *active_window = list_entry(new_active_window_list, window, sibling);
 
         parent->num_children--;
     }
     else
     {
         // Remove the active window from the layout tree;
-        list_del(&active_window->sibling);
+        list_del(&(*active_window)->sibling);
         // Disassociate the active window with its buffer;
-        list_del(&active_window->next_in_buffer);
+        list_del(&(*active_window)->next_in_buffer);
 
         // Add active window to to the free list.
-        list_add(&active_window->sibling, &screen->first_free_window);
+        list_add(&(*active_window)->sibling, &screen->first_free_window);
 
         Assert(is_singleton(&parent->first_child));
         dlist *last_and_first_child = parent->first_child.next;
@@ -938,13 +944,12 @@ static void close_active_window(screen *screen)
         list_add(&parent->sibling, &screen->first_free_window);
 
         // make the last_and_first_child the current active_window;
+        *active_window = list_entry(last_and_first_child, window, sibling);
+        (*active_window)->parent = parent->parent; 
 
-        active_window = list_entry(last_and_first_child, window, sibling);
-        active_window->parent = parent->parent; 
-
-        if (!active_window->parent)
+        if (!(*active_window)->parent)
         {
-            screen->root_window = active_window;
+            screen->root_window = *active_window;
         }
     }
 
@@ -953,13 +958,9 @@ static void close_active_window(screen *screen)
         list_del(&buffer->list);
     }
 
-
-    // clean_borders(screen, screen->root_window);
     update_layout(screen, screen->root_window);
-    draw_borders(screen, screen->root_window);
+    screen->change |= Render_RedrawBorders;
 }
-
-
 
 static void increase_window_height(screen *screen, window *win)
 {
@@ -1022,6 +1023,7 @@ static void increase_window_height(screen *screen, window *win)
             } break;
         }
     }
+    screen->change |= Render_RedrawBorders;
 }
 
 static void increase_window_width(screen *screen, window *win)
@@ -1083,10 +1085,13 @@ static void increase_window_width(screen *screen, window *win)
             } break;
         }
     }
+
+    screen->change |= Render_RedrawBorders;
 }
 
 static void attach_window(screen *screen, window *new, window *old, layout layout, u16 fixed_dim)
 {
+    window *active_window = screen->active_window;
     if (!old)
     {
         old = active_window;
@@ -1182,6 +1187,7 @@ static void attach_window(screen *screen, window *new, window *old, layout layou
     }
 
     update_layout(screen, parent);
+    screen->change |= Render_RedrawBorders;
 }
 
 static inline void map_buffer_to_window(piece_list *buffer, window *window)
@@ -1191,15 +1197,40 @@ static inline void map_buffer_to_window(piece_list *buffer, window *window)
     buffer->num_windows++;
 }
 
-static inline void reset_window_cursor(screen *screen, window *win)
+static inline void commit_cursor(window *win, mode edit_mode )
 {
-    win->bcy = win->dcy;
+    win->bc = win->dc;
+
+    if (win->layout != LeafCommand)
+    {
+        u32 curr_line_len = get_line_len_(&win->buffer->iter, win->bc.y);
+
+        if (win->bc.x >= curr_line_len)
+        {
+            win->bc.x = curr_line_len;
+        }
+
+        if (curr_line_len && (curr_line_len == win->bc.x) && edit_mode == Normal)
+        {
+            win->bc.x--;
+        }
+    }
+}
+
+
+static inline void reset_window_cursor(screen *screen, mode edit_mode)
+{
+    window *win = screen->active_window;
+    commit_cursor(win, edit_mode);
+
+
+    // win->bcy = win->dcy;
 
     u16 w_screen_y = get_screen_y(screen, win);
     u16 w_screen_x = get_screen_x(screen, win);
 
-    u16 window_cy = w_screen_y + (u16)(win->bcy - win->top_line);
-    u16 window_cx = w_screen_x + (u16)(win->bcx - win->cx_offset);
+    u16 window_cy = w_screen_y + (u16)(win->bc.y - win->top_line);
+    u16 window_cx = w_screen_x + (u16)(win->bc.x - win->cx_offset);
 
     win->cx = window_cx;
     win->cy = window_cy;
@@ -1226,34 +1257,34 @@ static void render_command_window(screen *screen)
     }
 }
 
-static void render_window(window *win, screen *screen, b32 is_active)
+static void render_window(window *win, screen *screen, mode edit_mode)
 {
     u16 w_height   = get_height(screen, win);
     u16 w_width    = get_width(screen, win);
 
-    if (is_active && win->layout == LeafBuffer)
+    if (win == screen->active_window && win->layout == LeafBuffer)
     {
         u32 height = (win->flags & WinFlags_StatusLineVisible) ? (w_height - 1) : w_height;
 
-        if (win->dcy >= win->top_line + height) 
+        if (win->dc.y >= win->top_line + height) 
         {
-            win->top_line += 1 + win->dcy - (win->top_line + height);
+            win->top_line += 1 + win->dc.y - (win->top_line + height);
             win->change |= Render_ScrollChange;
         } 
-        else if (win->dcy < win->top_line)
+        else if (win->dc.y < win->top_line)
         {
-            win->top_line = win->dcy;
+            win->top_line = win->dc.y;
             win->change |= Render_ScrollChange;
         }
 
-        if (win->bcx >= win->cx_offset + w_width)
+        if (win->bc.x >= win->cx_offset + w_width)
         {
-            win->cx_offset += 1 + win->bcx - (win->cx_offset + w_width);
+            win->cx_offset += 1 + win->bc.x - (win->cx_offset + w_width);
             win->change |= Render_ScrollChange;
         }
-        else if (win->bcx < win->cx_offset)
+        else if (win->bc.x < win->cx_offset)
         {
-            win->cx_offset = win->bcx;
+            win->cx_offset = win->bc.x;
             win->change |= Render_ScrollChange;
         }
     }
@@ -1268,7 +1299,7 @@ static void render_window(window *win, screen *screen, b32 is_active)
 
         grid_view new_view = default_grid_view(&m_grid, screen_y, screen_x, w_height, w_width);
 
-        fill_grid(screen, win, new_view);
+        fill_grid(screen, win, new_view, edit_mode);
 
         grid_diff(screen, win, win->view, new_view);
 
@@ -1285,23 +1316,23 @@ static void process_layout(editor_state *editor, u8 *input, u32 input_size)
         return;
     }
 
+    screen *screen = &editor->screen;
+    window *active_window = screen->active_window;
+
     switch (*input)
     {
         case ' ':
         {
-            edit_mode = Normal;
+            editor->edit_mode = Normal;
             active_window->change |= Render_ModeChange;
         } break;
         case 'w':
         {
             if (active_window->layout != LeafCommand)
             {
-                window *new_window = create_from(&editor->screen, NULL);
+                window *new_window = create_from(screen, NULL);
                 map_buffer_to_window(active_window->buffer, new_window);
-                attach_window(&editor->screen, new_window, NULL, Horizontal, 0);
-                set_color(&editor->screen, 32);
-                draw_borders(&editor->screen, editor->screen.root_window);
-                reset_color(&editor->screen);
+                attach_window(screen, new_window, NULL, Horizontal, 0);
             }
         } break;
 
@@ -1309,64 +1340,52 @@ static void process_layout(editor_state *editor, u8 *input, u32 input_size)
         {
             if (active_window->layout != LeafCommand)
             {
-                window *new_window = create_from(&editor->screen,  NULL);
+                window *new_window = create_from(screen,  NULL);
                 map_buffer_to_window(active_window->buffer, new_window);
-                attach_window(&editor->screen, new_window, NULL, Vertical, 0);
-                set_color(&editor->screen, 32);
-                draw_borders(&editor->screen, editor->screen.root_window);
-                reset_color(&editor->screen);
+                attach_window(screen, new_window, NULL, Vertical, 0);
             }
         } break;
 
         case 'l':
         {
             active_window->change |= Render_FocusChange;
-            move_horizontal(&editor->screen, 1, true);
+            move_horizontal(screen, 1, true);
             active_window->change |= Render_FocusChange;
             if (active_window->layout == LeafCommand)
             {
-            
-                edit_mode = Insert;
+                editor->edit_mode = Insert;
             }
         } break;
 
         case 'h':
         {
             active_window->change |= Render_FocusChange;
-            move_horizontal(&editor->screen, 1, false); 
+            move_horizontal(screen, 1, false); 
             active_window->change |= Render_FocusChange;
         } break;
 
         case 'j':
         {
             active_window->change |= Render_FocusChange;
-            move_vertical(&editor->screen, 1, true);
+            move_vertical(screen, 1, true);
             active_window->change |= Render_FocusChange;
         } break;
 
         case 'k':
         {
             active_window->change |= Render_FocusChange;
-            move_vertical(&editor->screen, 1, false);
+            move_vertical(screen, 1, false);
             active_window->change |= Render_FocusChange;
         } break;
 
         case 'L':
         {
-            // clean_borders(&editor->screen, editor->screen.root_window);
-            increase_window_width(&editor->screen, active_window);
-            set_color(&editor->screen, 32);
-            draw_borders(&editor->screen, editor->screen.root_window);
-            reset_color(&editor->screen);
+            increase_window_width(screen, active_window);
         } break;
 
         case 'R':
         {
-            // clean_borders(&editor->screen, editor->screen.root_window);
-            increase_window_height(&editor->screen, active_window);
-            set_color(&editor->screen, 32);
-            draw_borders(&editor->screen, editor->screen.root_window);
-            reset_color(&editor->screen);
+            increase_window_height(screen, active_window);
         } break;
 
         case 't':

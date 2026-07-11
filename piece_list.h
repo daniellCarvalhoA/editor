@@ -1,7 +1,7 @@
+
 typedef struct slice_cursor
 {
     piece *pieces;
-    buffer_type *types;
     u32 cursor;
     u32 count;
 } slice_cursor;
@@ -18,34 +18,25 @@ static inline void get_slice_cursor_from_header(
 {
     slice_cursor->count  = header->del_count;
     slice_cursor->pieces = (piece *) (header + 1);
-    slice_cursor->types  = (buffer_type *) (slice_cursor->pieces + header->del_count);
 }
 
-static inline void write_start(slice_cursor *slice_cursor, piece piece, buffer_type type)
+static inline void write_start(slice_cursor *slice_cursor, piece piece)
 {
     *(slice_cursor->pieces) = piece;
-    *(slice_cursor->types) = type;
     slice_cursor->cursor++;
 }
 
-static inline void write_last(slice_cursor *slice_cursor, piece piece, buffer_type type)
+static inline void write_last(slice_cursor *slice_cursor, piece piece)
 {
     *(slice_cursor->pieces + slice_cursor->count - 1) = piece;
-    *(slice_cursor->types + slice_cursor->count - 1) = type;
 }
 
-static inline void copy_slice(
-    slice_cursor *slice_cursor,
-    const piece *pieces,
-    const buffer_type *types,
-    u32 count)
+static inline void copy_slice(slice_cursor *slice_cursor, const piece *pieces, u32 count)
 {
     Assert(space_remaining(slice_cursor) >= count);
 
     piece *dst_pieces = slice_cursor->pieces + slice_cursor->cursor;
-    buffer_type *dst_types = slice_cursor->types + slice_cursor->cursor;
     memcpy(dst_pieces, pieces, sizeof(piece) * count);
-    memcpy(dst_types, types, sizeof(buffer_type) * count);
     slice_cursor->cursor += count;
 }
 
@@ -59,7 +50,6 @@ typedef enum insert_state
 typedef struct list_piece
 {
     piece piece;
-    buffer_type type;
     dlist list;
 } list_piece;
 
@@ -83,6 +73,23 @@ typedef struct insert_mode
 
 struct base_iter;
 
+typedef enum
+{
+    Edit_None = 0x0,
+    Edit_Left = 0x1,
+    Edit_Right = 0x2,
+    Edit_Both = 0x4,
+} edit_flags;
+
+typedef struct
+{
+    const piece *pieces;
+    u32 count;
+    edit_flags flags;
+    u32 start;
+    u32 end;
+} piece_range;
+
 typedef struct piece_list
 {
     memory_arena list_arena;
@@ -98,7 +105,7 @@ typedef struct piece_list
     u32 lines_deleted;
     b32 wrapped;
 
-    u32 num_pieces;
+    // u32 num_pieces;
     u32 size;  
     u32 lcnt;
 
@@ -129,69 +136,7 @@ typedef struct
     u32 pos;
     u32 line;
     piece piece;
-    buffer_type type;
 } iter;
-
-
-#define node_init(sentinel, iter) (iter).node = (sentinel)->next
-#define node_cond(sentinel, iter) (iter).node != (sentinel)
-#define node_init_from(from, iter) (iter).node = (from)
-
-#define node_advance(iter)                  \
-    (iter).pos     += (iter).node->size,    \
-    (iter).line    += (iter).node->lcnt,    \
-    (iter).abs_idx += (iter).node->count,   \
-    (iter).node     = (iter).node->next
-
-#define piece_init(iter)                   \
-    (iter).piece_index = 0,                \
-    (iter).piece = (iter).node->pieces[0], \
-    (iter).type  = (iter).node->b_types[0] \
-
-#define piece_init_from(iter, i)           \
-    (iter).piece_index = i,                \
-    (iter).piece = (iter).node->pieces[i], \
-    (iter).type  = (iter).node->b_types[i] \
-
-#define piece_cond(iter) (iter).piece_index < (iter).node->count
-
-#define piece_advance(iter)                                      \
-    (iter).pos      += (iter).piece.size,                        \
-    (iter).line     += (iter).piece.lcnt,                        \
-    (iter).piece = (iter).node->pieces[(iter).piece_index + 1],  \
-    (iter).type  = (iter).node->b_types[(iter).piece_index + 1], \
-    (iter).piece_index++
-
-
-#define advance_piece(iter)            \
-    (piece_cond((iter))) ? (piece_advance((iter))) : (node_advance((iter)))
-
-#define node_each(sentinel, iter) \
-    for (node_init((sentinel), (iter)); node_cond((sentinel), (iter)); node_advance((iter)))
-
-#define node_each_from(sentinel, from, iter) \
-    for (node_init_from((from), (iter)); node_cond((sentinel), (iter)); node_advance((iter))
-
-#define node_from(sentinel, iter)  \
-    for (; node_cond((sentinel), (iter)); node_advance((iter)))
-
-#define piece_each(iter) \
-    for (piece_init((iter)); piece_cond((iter)); piece_advance(iter))
-
-#define piece_each_from(iter, i)  \
-    for (piece_init_from((iter), (i)); piece_cound((iter)); piece_advance(iter))
-
-#define pieces(sentinel, iter, body)     \
-    do                                   \
-    {                                    \
-        node_each((sentinel), (iter))    \
-        {                                \
-            piece_each((iter))           \
-            {                            \
-                body                     \
-            }                            \
-        }                                \
-    } while (0)
 
 
 static void clear_insert_state(insert_mode *mode)

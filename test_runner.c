@@ -66,10 +66,6 @@ static WORK_QUEUE_CALLBACK(do_test_work)
             {
                 log->seed = seed(&entropy);
                 prng p;
-                // if (strcmp(test_name, "rows") == 0)
-                // {
-                //     // fprintf(stderr, "seed: %lu\n", log->seed);
-                // }
                 // Is there a need to go to the os here, 
                 // maybe call next on the prng, reseed??
                 from_system_entropy(&entropy, &p);

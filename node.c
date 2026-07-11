@@ -7,7 +7,10 @@ static inline b32 equal_offsets(const offset a, const offset b)
 
 static inline b32 pieces_are_equal(const piece a, const piece b)
 {
-    b32 result = (a.size == b.size) && (a.lcnt == b.lcnt) && (equal_offsets(a.off, b.off));
+    b32 result = (a.size == b.size) && 
+                 (a.lcnt == b.lcnt) && 
+                 (equal_offsets(a.off, b.off)) &&
+                 (a.type == b.type);
     return result;
 }
 
@@ -16,7 +19,7 @@ static b32 nodes_are_equal(const segmented_node *a, const segmented_node *b)
     b32 result = (a->count == b->count) && (a->size == b->size) && (a->lcnt == b->lcnt);
     for (u32 i = 0; i < a->count; ++i)
     {
-        result = result && (a->b_types[i] == b->b_types[i]);
+        // result = result && (a->b_types[i] == b->b_types[i]);
         result = result && pieces_are_equal(a->pieces[i], b->pieces[i]);
     }
     return result;

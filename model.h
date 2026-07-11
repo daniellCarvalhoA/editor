@@ -62,7 +62,6 @@ static inline b32 next_row(const model *model, u8 **row_pos, u32 *row_size)
 
 }
 
-
 static inline u32 line_position(const model *model, const u32 line)
 {
     u32 result = 0;
@@ -82,6 +81,21 @@ static inline u32 line_position(const model *model, const u32 line)
         }
     }
     return result;
+}
+
+static inline u32 line_len(const model *model, u32 line)
+{
+    u32 line_start = line_position(model, line);
+    u32 line_end;
+    if (line < num_lcnts(model))
+    {
+        line_end = line_position(model, line + 1) - 1;
+    }
+    else
+    {
+        line_end = model->s.len;
+    }
+    return line_end - line_start;
 }
 
 
@@ -190,7 +204,9 @@ static inline void model_move_to_cursor(model *model, u32 cy, u32 cx)
     model_move_to_line(model, cy);
     if (model->line_len > 0)
     {
-        model_move_to_pos(model, Minimum(model->pos + cx, model->pos + model->line_len - 1));
+        model_move_to_pos(
+            model,
+            Minimum(model->pos + cx, model->pos + model->line_len - 1));
     }
 }
 
@@ -214,7 +230,9 @@ static inline void model_move_by_motion(model *model, motion motion, u32 quant)
 
         case Right:
         {
-            u32 cx = Minimum(model->cx + quant, (model->line_len) ? (model->line_len - 1) : 0);
+            u32 cx = Minimum(
+                model->cx + quant,
+                (model->line_len) ? (model->line_len - 1) : 0);
             model_move_to_pos(model, model->pos - model->cx + cx);
         } break;
 
@@ -260,7 +278,11 @@ static inline void line_lens(const model *model, u32 *buf, const u32 start, cons
     *buf = model->s.len - prev_line_position;
 }
 
-static inline lines_result model_num_lines_from(const model *model, u32 start, u32 row_size, u32 num_rows)
+static inline lines_result model_num_lines_from(
+    const model *model,
+    u32 start,
+    u32 row_size,
+    u32 num_rows)
 {
     u32 end = num_lcnts(model) + 1;
     u32 len = end - start;
@@ -291,13 +313,20 @@ static void model_replace(model *model, u32 start, u32 end, string s)
     u32 delete_count = end - start;
     if (delete_count >= s.len)
     {
-        memmove(model->s.buffer + start + s.len, model->s.buffer + start + delete_count, model->s.len - end);
+        memmove(
+            model->s.buffer + start + s.len,
+            model->s.buffer + start + delete_count,
+            model->s.len - end);
+
         memcpy(model->s.buffer  + start, s.buffer, s.len);
         model->s.len -= delete_count - s.len;
     }
     else if (model->s.len + s.len - delete_count < model->s.capacity)
     {
-        memmove(model->s.buffer + end + s.len - delete_count, model->s.buffer + end, model->s.len - end);
+        memmove(
+            model->s.buffer + end + s.len - delete_count,
+            model->s.buffer + end,
+            model->s.len - end);
         memcpy(model->s.buffer + start, s.buffer, s.len);
         model->s.len += s.len - delete_count;
     }
@@ -319,6 +348,84 @@ static void model_replace(model *model, u32 start, u32 end, string s)
     }
 }
 
+static void model_replace_(model *model, test_cursor a, test_cursor b, string s)
+{
+    u32 start = line_position(model, a.y) + a.x;
+    u32 end   = line_position(model, b.y) + b.x;
+    model_replace(model, start, end, s);
+}
+
+
+
+static void model_rand_replace_2(model *model, prng *prng)
+{
+    if (model->s.len + num_insert_pieces == 0)
+    {
+        return;
+    }
+
+    test_cursor a;
+    test_cursor b;
+
+    b32 found = false;
+
+    u32 num_lines = num_lcnts(model);
+    u32 num_ins_pieces;
+    for (; !found ;)
+    {
+        num_ins_pieces = rand_range_u32_inclusive(prng, 0, num_insert_pieces);
+
+        a = rand_cursor(prng, MAX_LINE_LEN, num_lines);
+        b = rand_cursor(prng, MAX_LINE_LEN, num_lines);
+
+        switch (compare(a, b))
+        {
+            case LessThan:
+            {
+                found = true;
+            } break;
+
+            case GreaterThan:
+            {
+                test_cursor tmp = a;
+                a = b;
+                b = tmp;
+                found = true;
+            } break;
+
+            case EqualTo:
+            {
+                if (num_ins_pieces > 0)
+                {
+                    found = true;
+                }
+            } break;
+        }
+    }
+
+    u32 line_len_a = line_len(model, a.y);
+    u32 line_len_b = line_len(model, b.y);
+    a.x = Minimum(a.x, line_len_a);
+    b.x = Minimum(b.x, line_len_b);
+
+    INIT_STACK_STRING(s, MAX_STRING_LEN * num_ins_pieces);
+
+    for (u32 i = 0; i < num_ins_pieces; ++i)
+    {
+        string cursor = { 
+            .len = 0,
+            .capacity = s.capacity - s.len,
+            .buffer = buffer + s.len 
+        };
+        rand_ascii_string(&cursor, prng, 1, MAX_STRING_LEN);
+        s.len += cursor.len;
+    }
+
+    model_replace_(model, a, b, s);
+
+}
+
+
 static void model_rand_replace(model *model, prng *prng)
 {
     u32 begin, finish, num_ins_pieces;
@@ -327,6 +434,7 @@ static void model_rand_replace(model *model, prng *prng)
     {
         return;
     }
+
 
     ratio r = init_ratio(2, 4);
 
@@ -383,6 +491,32 @@ static model *rand_model(prng *prng)
     {
         model_rand_replace(result, prng);
     }
+
+    if (num_lcnts(result) == 0)
+    {
+        result->line_len = result->s.len;
+    }
+    else
+    {
+        result->line_len = line_position(result, 1) - 1;
+    }
+    return result;
+}
+
+
+static model *rand_model_2(prng *prng)
+{
+    model *result = BootstrapPushStruct(model, arena, 8 * 4096);
+    INIT_STACK_STRING(original_text, MAX_ORIGINAL_STRING_LEN);
+    rand_ascii_string(&original_text, prng, 0, MAX_ORIGINAL_STRING_LEN);
+
+    initialize_model(result, original_text);
+
+    for (u32 i = 0; i < num_edits; ++i)
+    {
+        model_rand_replace_2(result, prng);
+    }
+
     if (num_lcnts(result) == 0)
     {
         result->line_len = result->s.len;

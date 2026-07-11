@@ -1,9 +1,5 @@
 
-typedef struct
-{
-    u32 x;
-    u32 y;
-} win_cursor;
+typedef buffer_cursor win_cursor;
 
 typedef struct
 {
@@ -98,14 +94,15 @@ typedef struct window
     u16 cx;
     u16 cy;
     // Cursor position in the buffer 
-    u32 bcx;
-    u32 bcy;
+    buffer_cursor bc;
+    buffer_cursor dc;
     // Desired cursor position.
-    u32 dcx;
-    u32 dcy;
+    // u32 dcx;
+    // u32 dcy;
     // Visual mode data
-    u32 vcx;
-    u32 vcy;
+    buffer_cursor vc;
+    // u32 vcx;
+    // u32 vcy;
     // The buffer line range this window spans
     u32 top_line;
     u32 cx_offset;
@@ -131,14 +128,13 @@ static inline void clear_window(window *win)
 {
     win->cx = 0;
     win->cy = 0;
-    win->bcx = 0;
-    win->bcy = 0;
-    win->dcx = 0;
-    win->dcy = 0;
-    win->vcx = 0;
-    win->vcy = 0;
+    win->bc.x = 0;
+    win->bc.y = 0;
+    win->dc.x = 0;
+    win->dc.y = 0;
+    win->vc.x = 0;
+    win->vc.y = 0;
     win->top_line = 0;
-    win->cx = 0;
 }
 
 static inline u16 get_width(screen *screen, window *win)

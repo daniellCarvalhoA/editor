@@ -12,6 +12,7 @@ typedef enum
     Render_VisualModeCursorChange = 0x40,
     Render_StatusVisibilityChange = 0x80,
     Render_BufferExchange         = 0x100,
+    Render_RedrawBorders          = 0x200,
 } render_change;
 
 typedef struct screen
@@ -23,17 +24,13 @@ typedef struct screen
     u16 rows;
     u16 cols;
 
-    // u16 left;
-    // u16 right;
-    // u16 top;
-    // u16 bot;
-
     multilevel_grid grid; 
     u32 cursor;
     u8 buffer[8192];
 
     window *root_window;
     window *command_window;
+    window *active_window;
     dlist first_free_window;
 
 } screen;
@@ -47,7 +44,8 @@ static void reset_color(screen *screen);
 static void move_cursor_right(screen *screen, u32 x);
 static void set_cursor_column(screen *screen, u32 x);
 static inline grid_view screen_view(screen *screen);
-
+static void flush_buffer(screen *screen);
+static void free_screen(screen *screen);
 
 // All writes must be full. No string representing an ansi sequence can 
 // span multiple flush boundaries.

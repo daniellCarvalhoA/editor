@@ -1,9 +1,11 @@
 
 typedef struct undo_memory_header
 {
-    u32 abs_idx;
+    u16 abs_idx;
     u16 ins_count;
     u16 del_count;
+    u16 ref_count; // NOTE: UNUSED
+    // May put the next pointer as a footer in the data
     struct undo_memory_header *next;
 } undo_memory_header;
 
@@ -11,7 +13,6 @@ typedef struct undo_memory_block
 {
     struct undo_memory_block *next; 
     memory_index size;             
-
 } undo_memory_block;
 
 typedef struct undo_node 
@@ -22,8 +23,7 @@ typedef struct undo_node
     struct undo_node *last_child;
     struct undo_node *parent;
 
-    u32 cx;
-    u32 cy;
+    buffer_cursor bc;
 
     undo_memory_header *data;
 } undo_node;
@@ -46,10 +46,11 @@ static b32 headers_are_equal(undo_memory_header *a, undo_memory_header *b)
         return (a == 0);
     }
 
-    b32 same_idx = (a->abs_idx == b->abs_idx);
+    b32 same_idx       = (a->abs_idx == b->abs_idx);
+    b32 same_ref_count = (a->ref_count == b->ref_count);
     b32 same_ins_count = (a->ins_count == b->ins_count);
     b32 same_del_count = (a->del_count == b->del_count);
-    b32 same_next = headers_are_equal(a->next, b->next);
+    b32 same_next      = headers_are_equal(a->next, b->next);
 
     b32 result  = same_idx && (same_ins_count) && same_del_count && same_next;
     return result;
@@ -70,17 +71,6 @@ static b32 blocks_are_equal(undo_memory_block *a, undo_memory_block *b)
     return result;
 }
 
-// TODO: maybe use a large virtual alloc for the undo history,
-// and turn pointers into indexes of size u32. 
-// This should be reasonable since, there are as many nodes as 
-// non contiguous edits, and it is very unlikely that 
-// an editing session exceeds 2 ^ 32 -1, non contiguous edits, 
-// even 2 ^ 16 - 1 is a bit much;
-//
-// We could get the pointer to the a node by adding its index 
-// to the start of the memory block, and then casting.
-
-
 static b32 trees_are_equal(undo_node *a, undo_node *b)
 {
     if (!a)
@@ -92,9 +82,8 @@ static b32 trees_are_equal(undo_node *a, undo_node *b)
         return (a == 0);
     }
 
-    b32 equal_cx = a->cx == b->cx;
-    b32 equal_cy = a->cy == b->cy;
-    // b32 equal_pos = a->pos == b->pos;
+    b32 equal_cx      = a->bc.x == b->bc.x;
+    b32 equal_cy      = a->bc.y == b->bc.y;
     b32 equal_headers = headers_are_equal(a->data, b->data);
     b32 equal_next    = trees_are_equal(a->next, b->next);
     b32 equal_child   = trees_are_equal(a->first_child, b->first_child);
@@ -102,7 +91,6 @@ static b32 trees_are_equal(undo_node *a, undo_node *b)
     b32 result = equal_cx && equal_cy && equal_headers && equal_next && equal_child;
     return result;
 }
-
 
 static inline b32 histories_are_equal(history a, history b)
 {

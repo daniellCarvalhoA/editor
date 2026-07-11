@@ -8,8 +8,16 @@ typedef enum
     Absolute,
     Dollar,
     Zero,
-    Underscore
+    // Underscore,
+    MotionCount
 } motion;
+
+typedef enum
+{
+    Current,
+    Next,
+    PositionModifierCount,
+} position_modifier;
 
 typedef enum
 {
@@ -18,6 +26,7 @@ typedef enum
     Paste,
     Delete,
     Yank,
+    ActionCount,
 } action;
 
 typedef enum 
@@ -27,7 +36,8 @@ typedef enum
     VisualChange,
     LayoutChange,
     NormalChange,
-} mode_change;
+    ModeModifierCount,
+} mode_modifier;
 
 typedef enum 
 {
@@ -36,33 +46,37 @@ typedef enum
     Middle,
 } state;
 
+typedef struct
+{
+    action action;
+    motion motion;
+    mode_modifier m_mod;
+    position_modifier p_mod;
+    u32 quantifier;
+    u8 char_pending;
+} state_result;
+
 typedef struct 
 {
     state state;
-    action action;
-    motion motion;
-    mode_change change;
-    u32 quantifier;
-    u8  char_pending;
+    state_result s_result;
 } normal_parse_state;
 
-normal_parse_state p_state = 
-{
-    .state  = Start,
-    .action = NoAction,
-    .motion = NoMotion,
-    .change = NoChange,
-    .quantifier = 0,
-};
 
-static inline void reset_parse_state()
+static inline void reset_result(state_result *s_result)
 {
-    p_state.state  = Start;
-    p_state.action = NoAction;
-    p_state.motion = NoMotion;
-    p_state.change = NoChange;
-    p_state.quantifier = 0;
-    p_state.char_pending = '\0';
+    s_result->action = NoAction;
+    s_result->motion = NoMotion;
+    s_result->m_mod  = NoChange;
+    s_result->p_mod  = Next;
+    s_result->quantifier = 0;
+    s_result->char_pending = '\0';
+}
+
+static inline void reset_parse_state(normal_parse_state *p_state)
+{
+    p_state->state  = Start;
+    reset_result(&p_state->s_result);
 }
 
 typedef enum 
