@@ -1221,7 +1221,7 @@ static inline void commit_cursor(window *win, mode edit_mode )
 static inline void reset_window_cursor(screen *screen, mode edit_mode)
 {
     window *win = screen->active_window;
-    commit_cursor(win, edit_mode);
+    // commit_cursor(win, edit_mode);
 
 
     // win->bcy = win->dcy;

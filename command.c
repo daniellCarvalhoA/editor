@@ -239,8 +239,8 @@ static b32 parse_command(editor_state *state, u8 *input, u32 input_size)
         {
             screen->active_window = interacting_window;
             clear_buffer(&screen->command_window->c_buffer);
-            active_window->bc.x = 0;
-            active_window->bc.y = 0;
+            active_window->dc.x = 0;
+            active_window->dc.y = 0;
         } break;
 
         case '\r':

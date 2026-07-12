@@ -365,6 +365,9 @@ int main(int argc, char **argv)
     char clear_screen[] = "\x1b[2J\x1b[H";
     int written = write(STDOUT_FILENO, clear_screen, sizeof(clear_screen));
     Assert(written == ArrayCount(clear_screen));
+    char non_blink_cursor[] = "\x1b[2 q";
+    written = write(STDOUT_FILENO, non_blink_cursor, sizeof(non_blink_cursor));
+    Assert(written == ArrayCount(non_blink_cursor));
 
     editor_memory memory = allocate_editor_memory();
     linux_e_code code    = load_code(src_code_dll_fullpath);

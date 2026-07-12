@@ -24,3 +24,4 @@ static inline void free_paste_buffer(paste_buffer *buffer);
 static inline piece *get_pieces(paste_buffer *buffer);
 static inline u32 get_count(paste_buffer *buffer);
 static inline void reset_paste_buffer(paste_buffer *buffer);
+static inline b32 is_empty(paste_buffer *buffer);

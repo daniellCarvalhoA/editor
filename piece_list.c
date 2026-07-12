@@ -2,6 +2,18 @@
 
 typedef struct
 {
+    u32 count;
+    union {
+        undo_memory_header *undo_header;
+        piece *pieces;
+    };
+    u32 start;
+    u32 end;
+    edit_flags flags;
+} replace_result;
+
+typedef struct
+{
     const piece *base;
     u32 count;
 } piece_slice;
@@ -1738,7 +1750,71 @@ static piece serialize_piece_range_to(
     return result;
 }
 
+static replace_result  yank_(
+    piece_list *list, 
+    buffer_cursor c0,
+    buffer_cursor c1)
+{
+    replace_result result = {};
+    base_iter start = find_cursor(&list->iter, c0);
+    fix_iter(&start);
+    base_iter end   = find_cursor(&list->iter, c1);
+    fix_iter(&end);
 
+    result.start = start.pos_in_piece;
+    result.end   = end.pos_in_piece;
+
+    u32 not_boundary_end = end.pos_in_piece > 0;
+    u32 not_boundary_start = start.pos_in_piece > 0;
+
+    u32 num_pieces = (end.abs_idx + not_boundary_end) - start.abs_idx;
+    result.count = num_pieces;
+
+    if (not_boundary_start)
+    {
+        result.flags |= Edit_Left;
+    }
+
+    if (not_boundary_end)
+    {
+        result.flags |= Edit_Right;
+    }
+
+    if (num_pieces == 1)
+    {
+        if ((result.flags & Edit_Left) && (result.flags & Edit_Right))
+        {
+            result.flags = Edit_Both;
+        }
+    }
+
+    piece *copied_pieces = allocate_memory_block(
+        &list->undo_history,
+        &list->history_arena,
+        num_pieces * sizeof(piece));
+
+    result.pieces = copied_pieces;
+
+    slice_cursor s_cursor =  {
+        .pieces = copied_pieces,
+        .count = num_pieces
+    };
+
+    cursor start_cursor = { start.node, start.piece_idx };
+    cursor end_cursor = { end.node, end.piece_idx };
+
+    u32 copy_amount = end.abs_idx - start.abs_idx;
+
+    if (not_boundary_end)
+    {
+        add_to_cursor_(&end_cursor, 1);
+        copy_amount++;
+    }
+
+    copy_range(start_cursor, end_cursor, copy_amount, &s_cursor);
+
+    return result;
+}
 
 static edit_flags replace_range__(
     piece_list *list,
@@ -1902,18 +1978,6 @@ static edit_flags replace_range__(
 
 }
 
-
-typedef struct
-{
-    u32 count;
-    union {
-        undo_memory_header *undo_header;
-        piece *pieces;
-    };
-    u32 start;
-    u32 end;
-    edit_flags flags;
-} replace_result;
 
 // static void yank(piece_list *list, buffer_cursor c0, buffer_cursor c1)
 // {

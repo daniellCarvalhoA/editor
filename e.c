@@ -17,6 +17,9 @@
 
 static void render(editor_state *state)
 {
+    // reset_window_cursor(&state->screen, state->edit_mode);
+
+    commit_cursor(state->screen.active_window, state->edit_mode);
     piece_list *buffer;
     list_for_each_entry(buffer, &state->buffers, list)
     {

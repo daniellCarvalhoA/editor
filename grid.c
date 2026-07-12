@@ -42,10 +42,10 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
     base_advance_by_line(&iter, win->top_line);
     normalize(&iter);
 
-    u32 line = line_number(&iter);
-    u32 width = get_width(screen, win);
+    u32 line   = line_number(&iter);
+    u32 width  = get_width(screen, win);
     u32 height = get_height(screen, win);
-    height = (win->flags & WinFlags_StatusLineVisible) ? (height - 1) : height;
+    height     = (win->flags & WinFlags_StatusLineVisible) ? (height - 1) : height;
 
     win_cursor visual_cursor = win->vc; // { .x = win->vcx, .y = win->vcy }; 
     win_cursor curr_cursor   = win->bc; //{ .x = win->bcx, .y = win->bcy };
@@ -104,7 +104,8 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
                 screen_cursor s_cursor = { .x = col, .y = line  - win->top_line};
                 win_cursor w_cursor = map_screen_cursor_to_win_cursor(active_window, s_cursor); 
 
-                if (is_in_range(range, w_cursor))
+
+                if (is_in_range(range, w_cursor) && compare(w_cursor, active_window->bc) != EqualTo)
                 {
                     *at = Reversed;
                 }
@@ -237,7 +238,6 @@ static void grid_diff(screen *screen, window *win, grid_view old, grid_view new)
     place_cursor(screen, screen_y, screen_x);
 
     u16 win_height = get_height(screen, win);
-    // u16 height = (win->flags & WinFlags_StatusLineVisible) ? (win_height - 1) : win_height;
     for (u16 i = 0; i < win_height; ++i)
     {
         grid_line old_line = get_grid_line(old, i);
@@ -251,6 +251,5 @@ static void grid_diff(screen *screen, window *win, grid_view old, grid_view new)
         {
             write_string(screen, (u8 *) "\r\n", sizeof("\r\n") - 1);
         }
-        // flush_buffer(screen);
     }
 }
