@@ -1,7 +1,6 @@
-#include "e_platform.h"
 #include "e_share.h"
+#include "e_platform.h"
 #include <stdlib.h>
-#include <utf8proc.h>
 
 typedef struct piece_list piece_list;
 typedef struct window window;
@@ -12,6 +11,7 @@ typedef struct buffer_cursor
     u32 y;
 } buffer_cursor;
 
+#include "math.h"
 #include "command.h"
 #include "memory.h"
 #include "lists.h"
@@ -25,20 +25,13 @@ typedef struct buffer_cursor
 #include "grid.h"
 #include "screen.h"
 #include "window.h"
+#include "motions.h"
 #include "normal.h"
 
 const char mode_layout_str[] = " Layout | ";
 const char mode_insert_str[] = " Insert | ";
 const char mode_normal_str[] = " Normal | ";
 const char mode_visual_str[] = " Visual | ";
-
-typedef enum mode
-{
-    Normal,
-    Layout,
-    Insert,
-    Visual,
-} mode;
 
 // mode edit_mode = Normal;
 
@@ -84,6 +77,7 @@ typedef struct editor_state
     paste_buffer p_buffer;
     mode edit_mode;
     normal_parse_state p_state;
+    state_result prev_command;
 } editor_state;
 
 

@@ -5,7 +5,7 @@ static void commit_insert_mode_undo(piece_list *list)
     if ((state->del_count > 0) || (state->ins_count))
     {
         undo_memory_header *header = allocate_undo_memory_block(
-            &list->undo_history,
+            &list->history,
             &list->history_arena,
             state->del_count);
 
@@ -25,7 +25,7 @@ static void commit_insert_mode_undo(piece_list *list)
         if (list->staged)
         {
             LIST_INSERT(list->staged->data, header);
-            insert_node(&list->undo_history, list->staged);
+            insert_node(&list->history, list->staged);
             list->staged = 0;
         }
         else
@@ -34,7 +34,7 @@ static void commit_insert_mode_undo(piece_list *list)
             new_node->data = header;
             new_node->bc.x = state->cx;
             new_node->bc.y = state->cy;
-            insert_node(&list->undo_history, new_node);
+            insert_node(&list->history, new_node);
         }
     }
     clear_insert_state(&list->i_state);
@@ -44,7 +44,7 @@ static void commit_insert_mode_undo(piece_list *list)
 static void normal_mode(window *win)
 {
     commit_insert_mode_undo(win->buffer);
-    move_by_motion(win, Left, 1, Normal);
+    move_by_motion(win, Left, 1, NULL, 0);
 }
 
 static void insert_mode_insert(window *win, u8 *input, u32 input_size)
@@ -52,7 +52,6 @@ static void insert_mode_insert(window *win, u8 *input, u32 input_size)
     piece_list *list   = win->buffer;
     u32 lines_inserted = (*input == '\n');
     base_iter location = find_cursor(&list->iter, win->bc);
-    // fix_iter(&location);
 
     insert_mode *state   = &list->i_state;
     segmented_node *node = location.node;
@@ -81,15 +80,12 @@ static void insert_mode_insert(window *win, u8 *input, u32 input_size)
                 }
                 else 
                 {
-                    // list->num_pieces++;
                     state->ins_count += 2;
                     state->del_count = 1;
 
-                    // types[1]       = *get_type_(&location);
                     list_piece *lp = PushStruct(&state->insert_mode_arena, list_piece, NoClear());
 
                     lp->piece = *curr_piece;
-                    // lp->type  = types[1];
                     INIT_LIST_HEAD(&lp->list);
                     list_add(&lp->list, &state->piece_head);
 
@@ -133,7 +129,6 @@ static void insert_mode_insert(window *win, u8 *input, u32 input_size)
             state->state = Inserted;
             state->ins_count++;
             piece piece = make_piece(list, input, input_size); 
-            // make_piece_from_char(list, c);
 
             cursor cursor = { node, location.piece_idx };
             if (curr_piece && location.pos_in_piece == curr_piece->size)
@@ -141,7 +136,6 @@ static void insert_mode_insert(window *win, u8 *input, u32 input_size)
                 add_to_cursor(list, &cursor, 1);
             }
             replace(list, cursor, cursor, &piece, 1);
-            // list->num_pieces++;
             reset_cursor_(&list->iter);
         } break;
     }
@@ -491,6 +485,8 @@ static b32 process_insert(editor_state *state, u8 *input, u32 input_size)
         {
             normal_mode(active_window);
             state->edit_mode = Normal;
+            state->prev_command.inserted_count = 
+                (active_window->buffer->append.text + active_window->buffer->append.text_len) - (state->prev_command.inserted);
             active_window->change |= Render_ModeChange;
         } break;
 

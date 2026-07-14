@@ -1,19 +1,5 @@
 typedef enum
 {
-    NoMotion,
-    Up,
-    Down, 
-    Left,
-    Right,
-    Absolute,
-    Dollar,
-    Zero,
-    // Underscore,
-    MotionCount
-} motion;
-
-typedef enum
-{
     Current,
     Next,
     PositionModifierCount,
@@ -23,6 +9,7 @@ typedef enum
 {
     NoAction,
     Insertion,
+    Replace,
     Paste,
     Delete,
     Yank,
@@ -53,7 +40,14 @@ typedef struct
     mode_modifier m_mod;
     position_modifier p_mod;
     u32 quantifier;
-    u8 char_pending;
+    u32 count;
+    union
+    {
+        u8 char_pending[4];
+        u8 match[4];
+    };
+    u32 inserted_count;
+    u8 *inserted;
 } state_result;
 
 typedef struct 
@@ -65,12 +59,14 @@ typedef struct
 
 static inline void reset_result(state_result *s_result)
 {
-    s_result->action = NoAction;
-    s_result->motion = NoMotion;
-    s_result->m_mod  = NoChange;
-    s_result->p_mod  = Next;
-    s_result->quantifier = 0;
-    s_result->char_pending = '\0';
+    s_result->action         = NoAction;
+    s_result->motion         = NoMotion;
+    s_result->m_mod          = NoChange;
+    s_result->p_mod          = Next;
+    s_result->quantifier     = 0;
+    s_result->count          = 0;
+    s_result->inserted_count = 0;
+    s_result->inserted       = 0;
 }
 
 static inline void reset_parse_state(normal_parse_state *p_state)

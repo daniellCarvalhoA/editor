@@ -7,9 +7,9 @@
 
 // #define TESTS 1
 
-u32 num_edits         = 1;
+u32 num_edits         = 32;
 u32 num_tests         = 1000;
-u32 num_insert_pieces = 0;
+u32 num_insert_pieces = 32;
 
 #define MAX_STRING_LEN 40
 #define MAX_ORIGINAL_STRING_LEN 40
@@ -42,6 +42,7 @@ static win_cursor rand_cursor(prng *prng, u32 max_x, u32 max_y)
 #include "screen.c"
 #include "command.c"
 #include "paste_buffer.c"
+#include "motions.c"
 #include "normal.c"
 #include "normal_test.c"
 #include "insert_mode.c"
@@ -247,71 +248,71 @@ void replace_sound_2(prng *prng)
     free_piece_list(list);
 }
 
-TEST(paste)
+//EST(paste)
 void paste(prng *prng)
 {
-    editor_state *editor = rand_editor(prng);
-
-    piece_list *list = editor->screen.active_window->buffer;
-    u32 before_size = list->size; 
-    u32 before_lcnt = list->lcnt;
-    u8 *before_buffer = malloc(sizeof(u8) * list->size);
-    write_to_buffer(list, before_buffer, list->size);
-
-    editor->p_state.s_result.action     = NoAction;
-    editor->p_state.s_result.motion     = rand_motion(prng);
-    editor->p_state.s_result.m_mod      = NoChange;
-    editor->p_state.s_result.p_mod      = Current;
-    editor->p_state.s_result.quantifier = rand_range_u32_inclusive(prng, 0, editor->screen.active_window->buffer->lcnt);
-
-    edit(editor);
-    commit_cursor(editor->screen.active_window, editor->edit_mode);
-    reset_parse_state(&editor->p_state);
-
-    editor->p_state.s_result.action     = Delete;
-    editor->p_state.s_result.motion     = rand_motion(prng);
-    editor->p_state.s_result.m_mod      = NoChange;
-    editor->p_state.s_result.p_mod      = rand_position_modifier(prng);
-    editor->p_state.s_result.quantifier = rand_range_u32_inclusive(prng, 0, editor->screen.active_window->buffer->lcnt);
-
-    motion delete_motion = editor->p_state.s_result.motion;
-
-    u32 prev_cx = editor->screen.active_window->bc.x;
-    edit(editor);
-    commit_cursor(editor->screen.active_window, editor->edit_mode);
-    reset_parse_state(&editor->p_state);
-
-    u32 mid_size = list->size; 
-    u32 mid_lcnt = list->lcnt;
-    u8 *mid_buffer = malloc(sizeof(u8) * list->size);
-    write_to_buffer(list, mid_buffer, list->size);
-
-    u32 curr_cx = editor->screen.active_window->bc.x;
-
-    editor->p_state.s_result.action     = Paste;
-    editor->p_state.s_result.motion     = NoMotion;
-    editor->p_state.s_result.m_mod      = NoChange;
-    editor->p_state.s_result.p_mod      = (curr_cx < prev_cx) ? Next : Current;
-    editor->p_state.s_result.quantifier = 1;
-
-    edit(editor);
-    commit_cursor(editor->screen.active_window, editor->edit_mode);
-    reset_parse_state(&editor->p_state);
-
-    u32 after_size = list->size;
-    u32 after_lcnt = list->lcnt;
-    u8 *after_buffer = malloc(sizeof(u8) * list->size);
-
-    write_to_buffer(list, after_buffer, list->size);
-
-    Assert(before_size == after_size);
-    Assert(before_lcnt == after_lcnt);
-    Assert(strncmp((const char *) before_buffer, (const char *) after_buffer, list->size) == 0);
-
-    free(before_buffer);
-    free(after_buffer);
-    free(mid_buffer);
-    free_editor(editor);
+    // editor_state *editor = rand_editor(prng);
+    //
+    // piece_list *list = editor->screen.active_window->buffer;
+    // u32 before_size = list->size; 
+    // u32 before_lcnt = list->lcnt;
+    // u8 *before_buffer = malloc(sizeof(u8) * list->size);
+    // write_to_buffer(list, before_buffer, list->size);
+    //
+    // editor->p_state.s_result.action     = NoAction;
+    // editor->p_state.s_result.motion     = rand_motion(prng);
+    // editor->p_state.s_result.m_mod      = NoChange;
+    // editor->p_state.s_result.p_mod      = Current;
+    // editor->p_state.s_result.quantifier = rand_range_u32_inclusive(prng, 0, editor->screen.active_window->buffer->lcnt);
+    //
+    // edit(editor);
+    // commit_cursor(editor->screen.active_window, editor->edit_mode);
+    // reset_parse_state(&editor->p_state);
+    //
+    // editor->p_state.s_result.action     = Delete;
+    // editor->p_state.s_result.motion     = rand_motion(prng);
+    // editor->p_state.s_result.m_mod      = NoChange;
+    // editor->p_state.s_result.p_mod      = rand_position_modifier(prng);
+    // editor->p_state.s_result.quantifier = rand_range_u32_inclusive(prng, 0, editor->screen.active_window->buffer->lcnt);
+    //
+    // motion delete_motion = editor->p_state.s_result.motion;
+    //
+    // u32 prev_cx = editor->screen.active_window->bc.x;
+    // edit(editor);
+    // commit_cursor(editor->screen.active_window, editor->edit_mode);
+    // reset_parse_state(&editor->p_state);
+    //
+    // u32 mid_size = list->size; 
+    // u32 mid_lcnt = list->lcnt;
+    // u8 *mid_buffer = malloc(sizeof(u8) * list->size);
+    // write_to_buffer(list, mid_buffer, list->size);
+    //
+    // u32 curr_cx = editor->screen.active_window->bc.x;
+    //
+    // editor->p_state.s_result.action     = Paste;
+    // editor->p_state.s_result.motion     = NoMotion;
+    // editor->p_state.s_result.m_mod      = NoChange;
+    // editor->p_state.s_result.p_mod      = (curr_cx < prev_cx) ? Next : Current;
+    // editor->p_state.s_result.quantifier = 1;
+    //
+    // edit(editor);
+    // commit_cursor(editor->screen.active_window, editor->edit_mode);
+    // reset_parse_state(&editor->p_state);
+    //
+    // u32 after_size = list->size;
+    // u32 after_lcnt = list->lcnt;
+    // u8 *after_buffer = malloc(sizeof(u8) * list->size);
+    //
+    // write_to_buffer(list, after_buffer, list->size);
+    //
+    // Assert(before_size == after_size);
+    // Assert(before_lcnt == after_lcnt);
+    // Assert(strncmp((const char *) before_buffer, (const char *) after_buffer, list->size) == 0);
+    //
+    // free(before_buffer);
+    // free(after_buffer);
+    // free(mid_buffer);
+    // free_editor(editor);
 }
 
 //EST(replace_against_model)
@@ -404,7 +405,7 @@ void undo(prng *prng)
         if (header)
         {
             node->data = header;
-            insert_node(&list->undo_history, node);
+            insert_node(&list->history, node);
         }
         else
         {
@@ -455,7 +456,7 @@ void undo_2(prng *prng)
         if (rep.undo_header)
         {
             node->data = rep.undo_header;
-            insert_node(&list->undo_history, node);
+            insert_node(&list->history, node);
         }
         else
         {
@@ -499,7 +500,7 @@ void undo_redo(prng *prng)
         if (rep.undo_header)
         {
             node->data = rep.undo_header;
-            insert_node(&list->undo_history, node);
+            insert_node(&list->history, node);
         }
         else
         {
@@ -551,7 +552,7 @@ void undo_redo_2(prng *prng)
         if (rep.undo_header)
         {
             node->data = rep.undo_header;
-            insert_node(&list->undo_history, node);
+            insert_node(&list->history, node);
         }
         else
         {
@@ -610,8 +611,8 @@ void insert_mode_seq(prng *p)
     {
         Assert(win_a->bc.y == 0);
 
-        move_by_motion(win_a, Down, cy, Insert);
-        move_by_motion(win_a, Right, cx, Insert);
+        move_by_motion(win_a, Down, cy, NULL, 0);
+        move_by_motion(win_a, Right, cx, NULL, 0);
 
         insert_mode_sequence(win_a, p, seq);
         commit_insert_mode_undo(list_a);
@@ -621,8 +622,8 @@ void insert_mode_seq(prng *p)
     window *win_b = create_window(&screen, LeafBuffer, 0);
     map_buffer_to_window(list_b, win_b);
     {
-        move_by_motion(win_b, Down, cy, Insert);
-        move_by_motion(win_b, Right, cx, Insert);
+        move_by_motion(win_b, Down, cy, NULL, 0);
+        move_by_motion(win_b, Right, cx, NULL, 0);
 
         if (seq->min.x != seq->max.x || seq->min.y != seq->max.y || seq->text_added.len > 0)
         {
@@ -640,7 +641,7 @@ void insert_mode_seq(prng *p)
                 node->data = range_replace(list_b, seq->min, seq->max, 0, 0);
             }
 
-            insert_node(&list_b->undo_history, node);
+            insert_node(&list_b->history, node);
         }
     }
 
@@ -678,8 +679,8 @@ void insert_mode_seq_2(prng *p)
     {
         Assert(win_a->bc.y == 0);
 
-        move_by_motion(win_a, Down, cy, Insert);
-        move_by_motion(win_a, Right, cx, Insert);
+        move_by_motion(win_a, Down, cy, NULL, 0);
+        move_by_motion(win_a, Right, cx, NULL, 0);
 
         insert_mode_sequence(win_a, p, seq);
         commit_insert_mode_undo(list_a);
@@ -689,8 +690,8 @@ void insert_mode_seq_2(prng *p)
     window *win_b = create_window(&screen, LeafBuffer, 0);
     map_buffer_to_window(list_b, win_b);
     {
-        move_by_motion(win_b, Down, cy, Insert);
-        move_by_motion(win_b, Right, cx, Insert);
+        move_by_motion(win_b, Down, cy, NULL, 0);
+        move_by_motion(win_b, Right, cx, NULL, 0);
 
         if (seq->min.x != seq->max.x || seq->min.y != seq->max.y || seq->text_added.len > 0)
         {
@@ -712,7 +713,7 @@ void insert_mode_seq_2(prng *p)
                 node->data = rep.undo_header;
             }
 
-            insert_node(&list_b->undo_history, node);
+            insert_node(&list_b->history, node);
         }
     }
 

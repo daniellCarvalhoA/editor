@@ -1,4 +1,4 @@
-#define MAX_PIECES_PER_NODE 4
+#define MAX_PIECES_PER_NODE 32
 
 typedef enum buffer_type
 {

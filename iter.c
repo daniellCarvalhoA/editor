@@ -15,6 +15,7 @@
 //
 
 
+typedef b32 (*search_pred)(u8 *str, u32 len, u8 *needle, u32 n_len);
 const u8 utf8_len_table[] = {
     // 1  2  3  4  5  6  7  8  9  A  B  C  D  E  F
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0
@@ -103,13 +104,11 @@ static inline b32 base_init_(piece_list *list, iter_type type, base_iter *iter)
     return result;
 }
 
-
 static inline piece *get_piece_(base_iter *iter)
 {
     piece *result = (iter->piece_idx < iter->node->count) ? iter->node->pieces + iter->piece_idx : 0;
     return result;
 }
-
 
 static inline u32 get_position_from_line_unsafe(base_iter *iter, piece piece)
 {
@@ -792,6 +791,25 @@ static inline b32 base_next(base_iter *iter)
 }
 #endif
 
+
+static inline b32 is_white_space(u8 *s, u32 len, u8 *needle, u32 n_len)
+{
+    b32 result = (len > 0) && ((*s == ' ') || (*s == '\t'));
+    return result;
+}
+
+static inline b32 not_equal_to(u8 *s, u32 len, u8 *needle, u32 n_len)
+{
+    b32 result = true; 
+
+    if (len == n_len)
+    {
+        result = (memcmp(s, needle, len) != 0);
+    }
+    return result;
+}
+
+
 static inline b32 base_next_cell_(base_iter *iter)
 {
     if (get_position(iter) == iter->list->size)
@@ -980,6 +998,9 @@ static inline b32 base_next_line(base_iter *iter)
     return result;
 }
 
+ 
+
+
 static inline u8 get_char(base_iter *iter) 
 {
     if (!(iter->type & Position))
@@ -1018,9 +1039,39 @@ static inline u8 get_char(base_iter *iter)
 }
 
 
+static inline str get_char_utf8(base_iter *iter)
+{
+    str result =  {};
+    if (!(iter->type & Position))
+    {
+        Assert(iter->type & LineNumber);
+        iter->type |= Position;
+        iter->pos_in_piece = get_position_from_line(iter);
+    }
+
+    fix_iter_(iter);
+
+    piece piece = iter->node->pieces[iter->piece_idx];
+
+    const buffer *buffer = get_buffer(iter->list, piece.type);
+
+    u32 piece_offset = buffer->lines[piece.off.row] + piece.off.col;
+
+    result.buffer =  buffer->text + piece_offset + iter->pos_in_piece;
+    result.len    = utf8_len_table[result.buffer[0]];
+    return result;
+}
 
 
 
+static inline b32 base_next_pred(base_iter *iter, search_pred pred, u8 *needle, u32 needle_len)
+{
+    str s = get_char_utf8(iter);
+
+    b32 result = pred(s.buffer, s.len, needle, needle_len) && base_next_cell_(iter);
+
+    return result;
+}
 
 
 

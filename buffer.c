@@ -128,3 +128,37 @@ static offset search_piece(const buffer *buffer, const piece piece, const u32 de
     return result;
 }
 
+#if TESTS
+static buffer rand_ascii_buffer(memory_arena *arena, prng *prng)
+{
+    buffer buf = {};
+    buf.text_len = rand_u8_inclusive(prng, 40);
+    buf.text     = PushArray(arena, buf.text_len, u8, default_arena_params());
+
+    u32 lines[40] = {};
+    u32 num_lines = 1;
+
+    ratio ratio = init_ratio(1, 10);
+
+    for (u32 i = 0; i < buf.text_len; ++i) 
+    {
+        if (chance(prng, ratio))
+        {
+            buf.text[i] = '\n';
+            lines[num_lines++] = i + 1;
+        }
+        else
+        {
+            u8 c = rand_range_u8_inclusive(prng, 32, 126);
+            buf.text[i] = c;
+        }
+    }
+
+    buf.num_lines = num_lines;
+    buf.lines = PushArray(arena, buf.num_lines, u32, default_arena_params());
+    memcpy(buf.lines, lines, sizeof(u32) * num_lines);
+
+    return buf;
+}
+#endif
+

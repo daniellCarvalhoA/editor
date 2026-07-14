@@ -10,8 +10,8 @@ typedef struct ratio
 static ratio init_ratio(
     u64 numerator, u64 denominator)
 {
-    assert(denominator > 0);
-    assert(numerator <= denominator);
+    Assert(denominator > 0);
+    Assert(numerator <= denominator);
     ratio result = { .numerator = numerator, .denominator = denominator };
     return result;
 }
@@ -268,26 +268,26 @@ static u32 rand_u8_inclusive(prng *prng, const u8 max)
 
 static u64 rand_range_u64_inclusive(prng *prng, const u64 min, const u64 max)
 {
-    assert(min <= max);
+    Assert(min <= max);
     return min + rand_u64_inclusive(prng, max - min);
 }
 
 static u32 rand_range_u32_inclusive(prng *prng, const u32 min, const u32 max)
 {
-    assert(min <= max);
+    Assert(min <= max);
     return min + rand_u32_inclusive(prng, max - min);
 }
 
 static u8 rand_range_u8_inclusive(prng *prng, const u8 min, const u8 max)
 {
-    assert(min <= max);
+    Assert(min <= max);
     return min + rand_u8_inclusive(prng, max - min);
 }
 
 static b32 chance(prng *prng, const ratio probability)
 {
-    assert(probability.denominator > 0);
-    assert(probability.numerator <= probability.denominator);
+    Assert(probability.denominator > 0);
+    Assert(probability.numerator <= probability.denominator);
     b32 result = rand_u64_inclusive(prng, probability.denominator - 1) < probability.numerator;
     return result;
 }
@@ -352,34 +352,3 @@ static void rand_ascii_string(string *s, prng *prng, const u32 min_len, const u3
     }
 }
 
-static buffer rand_ascii_buffer(memory_arena *arena, prng *prng)
-{
-    buffer buf = {};
-    buf.text_len = rand_u8_inclusive(prng, 40);
-    buf.text     = PushArray(arena, buf.text_len, u8, default_arena_params());
-
-    u32 lines[40] = {};
-    u32 num_lines = 1;
-
-    ratio ratio = init_ratio(1, 10);
-
-    for (u32 i = 0; i < buf.text_len; ++i) 
-    {
-        if (chance(prng, ratio))
-        {
-            buf.text[i] = '\n';
-            lines[num_lines++] = i + 1;
-        }
-        else
-        {
-            u8 c = rand_range_u8_inclusive(prng, 32, 126);
-            buf.text[i] = c;
-        }
-    }
-
-    buf.num_lines = num_lines;
-    buf.lines = PushArray(arena, buf.num_lines, u32, default_arena_params());
-    memcpy(buf.lines, lines, sizeof(u32) * num_lines);
-
-    return buf;
-}

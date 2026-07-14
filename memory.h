@@ -81,9 +81,9 @@ static inline void end_temporary_memory(
         free_last_block(arena);
     }
 
-    assert(arena->used >= tmp_mem.used);
+    Assert(arena->used >= tmp_mem.used);
     arena->used = tmp_mem.used;
-    assert(arena->tmp_count > 0);
+    Assert(arena->tmp_count > 0);
     --arena->tmp_count; 
 }
 #define ZeroStruct(instance) ZeroSize(sizeof(instance), &(instance))
@@ -318,7 +318,7 @@ static inline void free_arena(
 }
         
 
-
+#if 0
 static void reset_used(
     memory_arena *arena,
     void *reset)
@@ -326,7 +326,6 @@ static void reset_used(
     memory_index new_used = ((memory_index) arena->base) - (memory_index) reset;
     arena->used = new_used;
 }
-
 static char *PushString(
     memory_arena *arena,
     char* src)
@@ -357,6 +356,7 @@ static char *PushAndNullTerminate(
 
     return dst;
 }
+#endif
 
 #define BootstrapPushStruct(type, member,...) \
     (type *) bootstrap_push_size(sizeof(type), offsetof(type, member), ## __VA_ARGS__)

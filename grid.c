@@ -1,4 +1,4 @@
-
+#define TAB_STOP 4
 static void fill_command_grid(screen *screen, window *win, grid_view grid) 
 {
     command_buffer *c_buffer = &win->c_buffer;
@@ -71,6 +71,7 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
         }
 
         u32 col = 0;
+        u32 v_col = 0;
         while (not_over && col < width)
         {
             cell_item item   = base_next_cell(&iter);
@@ -92,28 +93,72 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
                 type = item.len - 1;
             }
 
-            g_line.grid->types[g_line.line_start + col] = type;
-            u8 *data = get_cell_data(g_line, col, type);
-            attr *at = get_cell_attr_(g_line, col);
-
-            memcpy(data, (void *) (&item.cell), sizeof(u8) * (type + 1));
-            *at = Default;
-
-            if (edit_mode == Visual) 
+            if (item.cell == '\t')
             {
-                screen_cursor s_cursor = { .x = col, .y = line  - win->top_line};
-                win_cursor w_cursor = map_screen_cursor_to_win_cursor(active_window, s_cursor); 
+                Assert(type == U8);
+                u32 next_col = 1 + col;
+                u32 tab_length = 1 + TAB_STOP - (next_col % TAB_STOP);
+                tab_length = Minimum(tab_length, width - col);
+                memset(
+                    g_line.grid->types + g_line.line_start + col,
+                    type,
+                    tab_length);
+                u8 *data = get_cell_data(g_line, col, type);
+                attr *at = get_cell_attr_(g_line, col);
 
-
-                if (is_in_range(range, w_cursor) && compare(w_cursor, active_window->bc) != EqualTo)
+                memset(data, ' ', tab_length);
+                if (edit_mode == Visual) 
                 {
-                    *at = Reversed;
-                }
-            }
-            
-            col++;
+                    screen_cursor s_cursor = { 
+                        .x = col + tab_length - 1,
+                        .y = line  - win->top_line
+                    };
+                    win_cursor w_cursor = map_screen_cursor_to_win_cursor(
+                        active_window,
+                        s_cursor); 
 
-            not_over = item.valid;
+                    if (is_in_range(range, w_cursor) && compare(w_cursor, active_window->bc) != EqualTo)
+                    {
+                        memset(at, Reversed, tab_length);
+                    }
+                }
+
+                u8 *gv_col = get_cell_vcol_(g_line, v_col);
+                *gv_col = tab_length;
+                
+                col += tab_length;
+
+                not_over = item.valid;
+            }
+            else
+            {
+
+                g_line.grid->types[g_line.line_start + col] = type;
+                u8 *data = get_cell_data(g_line, col, type);
+                attr *at = get_cell_attr_(g_line, col);
+
+                memcpy(data, (void *) (&item.cell), sizeof(u8) * (type + 1));
+                *at = Default;
+
+                if (edit_mode == Visual) 
+                {
+                    screen_cursor s_cursor = { .x = col, .y = line  - win->top_line};
+                    win_cursor w_cursor = map_screen_cursor_to_win_cursor(active_window, s_cursor); 
+
+
+                    if (is_in_range(range, w_cursor) && compare(w_cursor, active_window->bc) != EqualTo)
+                    {
+                        *at = Reversed;
+                    }
+                }
+                u8 *gv_col = get_cell_vcol_(g_line, v_col);
+                *gv_col = 1;
+                
+                col++;
+
+                not_over = item.valid;
+            }
+            v_col++;
         }
 
         if (col == width)
@@ -127,7 +172,7 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
     {
         grid_line g_line = get_grid_line(grid, height);
 
-        grid_type *types = get_cell_type_(g_line, 0);
+        u8 *types = get_cell_type_(g_line, 0);
         attr *attribute  = get_cell_attr_(g_line, 0);
         u8 *data         = get_cell_data(g_line, 0, U8);
 
@@ -184,6 +229,7 @@ static void line_diff(screen *screen, window *win, grid_line old, grid_line new)
         {
             grid_type curr_type = get_cell_type(new, j);
             attr curr_attr = get_cell_attr(new, j);
+            // u8 vcol = get_cell_vcol(new, j);
             if (curr_type != prev_type || curr_attr != prev_attr)
             {
                 u32 same_type_seq_diff_length = j - type_idx;

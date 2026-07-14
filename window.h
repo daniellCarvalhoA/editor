@@ -1,11 +1,21 @@
 
+typedef enum mode
+{
+    Normal,
+    Layout,
+    Insert,
+    Visual,
+} mode;
+
 typedef buffer_cursor win_cursor;
 
 typedef struct
 {
     win_cursor first;
-    win_cursor one_after_last;
+    win_cursor one_past_end;
 } win_range;
+
+typedef win_range buffer_range;
 
 typedef win_cursor screen_cursor;
 
@@ -15,7 +25,6 @@ typedef enum
     EqualTo,
     GreaterThan
 } ord;
-
 
 static inline ord compare(win_cursor a, win_cursor b)
 {
@@ -95,8 +104,8 @@ typedef struct window
     u16 cy;
     // Cursor position in the buffer 
     buffer_cursor bc;
-    buffer_cursor dc;
     // Desired cursor position.
+    buffer_cursor dc;
     // u32 dcx;
     // u32 dcy;
     // Visual mode data
@@ -269,7 +278,7 @@ static inline win_cursor map_screen_cursor_to_win_cursor(window *win, screen_cur
 
 static inline b32 is_in_range(win_range range, win_cursor cursor)
 {
-    b32 result = compare(cursor, range.first) > LessThan && compare(cursor, range.one_after_last) < GreaterThan;
+    b32 result = compare(cursor, range.first) > LessThan && compare(cursor, range.one_past_end) < GreaterThan;
     return result;
 }
 
@@ -282,13 +291,13 @@ static inline win_range make_range(win_cursor a, win_cursor b)
         case EqualTo:
         {
             range.first = a;
-            range.one_after_last = b;
+            range.one_past_end = b;
         } break; 
 
         case GreaterThan:
         {
             range.first = b;
-            range.one_after_last = a;
+            range.one_past_end = a;
         } break;
     }
     return range;

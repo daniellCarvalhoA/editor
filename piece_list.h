@@ -20,6 +20,7 @@ static inline void get_slice_cursor_from_header(
     slice_cursor->pieces = (piece *) (header + 1);
 }
 
+
 static inline void write_start(slice_cursor *slice_cursor, piece piece)
 {
     *(slice_cursor->pieces) = piece;
@@ -118,7 +119,7 @@ typedef struct piece_list
     insert_mode i_state;
 
     memory_arena history_arena;
-    history undo_history;
+    history history;
 
     undo_node *staged;
 

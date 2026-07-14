@@ -52,7 +52,7 @@ static b32 headers_are_equal(undo_memory_header *a, undo_memory_header *b)
     b32 same_del_count = (a->del_count == b->del_count);
     b32 same_next      = headers_are_equal(a->next, b->next);
 
-    b32 result  = same_idx && (same_ins_count) && same_del_count && same_next;
+    b32 result  = same_ref_count && same_idx && same_ins_count && same_del_count && same_next;
     return result;
 }
 

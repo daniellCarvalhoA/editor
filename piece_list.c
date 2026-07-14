@@ -35,7 +35,7 @@ static b32 lists_are_equal(const piece_list *a, const piece_list *b)
     result = result && buffers_are_equal(&a->original, &b->original);
     result = result && buffers_are_equal(&a->append, &b->append);
     result = result && semantic_equality(&a->root_sentinel, &b->root_sentinel);
-    result = result && histories_are_equal(a->undo_history, b->undo_history);
+    result = result && histories_are_equal(a->history, b->history);
     return result;
 }
 
@@ -70,7 +70,7 @@ static void list_invariants(piece_list *list)
 
     u32 size = 0;
     u32 lcnt = 0;
-    u32 num_pieces = 0;
+    // u32 num_pieces = 0;
     for (segmented_node *node = list->root_sentinel.next; 
         node != &list->root_sentinel;
         node = node->next)
@@ -272,6 +272,20 @@ static base_iter find_cursor(base_iter *last_location, buffer_cursor cursor)
 {
     base_iter iter = find_line(last_location, cursor.y);
     base_advance_by_cell(&iter, cursor.x);
+    return iter;
+}
+
+static base_iter find_non_white_space(base_iter *last_location, u32 cy)
+{
+    base_iter iter = find_line(last_location, cy);
+    while (base_next_pred(&iter, is_white_space, NULL, 0)) {}
+    return iter;
+}
+
+static base_iter find_char(base_iter *last_location, u8 *token, u32 token_len, buffer_cursor cursor)
+{
+    base_iter iter = find_cursor(last_location, cursor);
+    while (base_next_pred(&iter, not_equal_to, token, token_len)) {}
     return iter;
 }
 
@@ -1436,7 +1450,7 @@ static cursor make_space(piece_list *list, cursor start, cursor end, u32 size)
 static void redo(window *win)
 {
     piece_list *list = win->buffer;
-    undo_node *curr_node = undo_node_unpop(&list->undo_history);
+    undo_node *curr_node = undo_node_unpop(&list->history);
 
     if (curr_node)
     {
@@ -1453,7 +1467,7 @@ static void redo(window *win)
             cursor end_cursor   = abs_idx_to_cursor_2(list, header->abs_idx + header->ins_count);
 
             undo_memory_header *redo_header = 
-                allocate_undo_memory_block(&list->undo_history, &list->history_arena, header->ins_count);
+                allocate_undo_memory_block(&list->history, &list->history_arena, header->ins_count);
 
             redo_header->ins_count = header->del_count;
             redo_header->del_count = header->ins_count;
@@ -1490,7 +1504,7 @@ static void redo(window *win)
             prev_header = redo_header;
         }
 
-        free_undo_memory_block(&list->undo_history, *first_header);
+        free_undo_memory_block(&list->history, *first_header);
         *first_header = prev_header;
         reset_cursor_(&list->iter);
     }
@@ -1499,7 +1513,7 @@ static void redo(window *win)
 static void undo_(window *win)
 {
     piece_list *list = win->buffer;
-    undo_node *curr_node = undo_node_pop(&list->undo_history);
+    undo_node *curr_node = undo_node_pop(&list->history);
 
     if (curr_node)
     {
@@ -1515,7 +1529,7 @@ static void undo_(window *win)
             cursor start_cursor = abs_idx_to_cursor_2(list, header->abs_idx);
             cursor end_cursor   = abs_idx_to_cursor_2(list, header->abs_idx + header->ins_count);
 
-            undo_memory_header *redo_header = allocate_undo_memory_block(&list->undo_history, &list->history_arena, header->ins_count);
+            undo_memory_header *redo_header = allocate_undo_memory_block(&list->history, &list->history_arena, header->ins_count);
 
             redo_header->ins_count = header->del_count;
             redo_header->del_count = header->ins_count;
@@ -1549,7 +1563,7 @@ static void undo_(window *win)
             prev_header = redo_header;
         }
 
-        free_undo_memory_block(&list->undo_history, *first_header);
+        free_undo_memory_block(&list->history, *first_header);
         *first_header = prev_header;
         reset_cursor_(&list->iter);
     }
@@ -1789,7 +1803,7 @@ static replace_result  yank_(
     }
 
     piece *copied_pieces = allocate_memory_block(
-        &list->undo_history,
+        &list->history,
         &list->history_arena,
         num_pieces * sizeof(piece));
 
@@ -2012,7 +2026,7 @@ static replace_result range_replace__(
     u32 not_boundary_end   = end.pos_in_piece > 0;
 
     u32 num_undo_pieces = (end.abs_idx + not_boundary_end) - start.abs_idx;
-    u32 num_copied_pieces = num_undo_pieces;
+    // u32 num_copied_pieces = num_undo_pieces;
 
     for (u32 i = 0; i < p_range.count; ++i)
     {
@@ -2028,7 +2042,7 @@ static replace_result range_replace__(
     list->lcnt -= num_lines_deleted;
 
     undo_memory_header *header = allocate_undo_memory_block(
-        &list->undo_history,
+        &list->history,
         &list->history_arena,
         num_undo_pieces);
 
@@ -2067,7 +2081,7 @@ static replace_result range_replace_(
     u32 not_boundary_end   = end.pos_in_piece > 0;
 
     u32 num_undo_pieces = (end.abs_idx + not_boundary_end) - start.abs_idx;
-    u32 num_copied_pieces = num_undo_pieces;
+    // u32 num_copied_pieces = num_undo_pieces;
 
     for (u32 i = 0; i < num_pieces; ++i)
     {
@@ -2083,7 +2097,7 @@ static replace_result range_replace_(
     list->lcnt -= num_lines_deleted;
 
     undo_memory_header *header = allocate_undo_memory_block(
-        &list->undo_history,
+        &list->history,
         &list->history_arena,
         num_undo_pieces);
 
@@ -2121,7 +2135,7 @@ static undo_memory_header *replace_range(
         (start.abs_idx + (start.pos_in_piece == start_size));
 
     undo_memory_header *undo_header = allocate_undo_memory_block(
-        &list->undo_history,
+        &list->history,
         &list->history_arena,
         num_undo_pieces);
 
@@ -2259,7 +2273,7 @@ static void initialize_piece_list(piece_list *list, u8 *original_text, u32 origi
 
     initialize_arena_with_size(&list->history_arena, 64 * 4094);
     initialize_arena(&list->insert_state_arena);
-    initialize_undo_history(&list->undo_history);
+    initialize_undo_history(&list->history);
     initialize_insert_state(&list->i_state);
 
     if (list->original.text_len)
@@ -2389,7 +2403,6 @@ static replace_result rand_replace_(piece_list *list, prng *prng)
     {
         return result;
     }
-    base_iter start, end;
     u32 num_ins_pieces;
 
     test_cursor a;

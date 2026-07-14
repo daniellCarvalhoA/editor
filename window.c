@@ -955,7 +955,8 @@ static void close_active_window(screen *screen)
 
     if (buffer->num_windows == 0)
     {
-        list_del(&buffer->list);
+        // Decide whether or not to free the buffer.
+        // list_del(&buffer->list);
     }
 
     update_layout(screen, screen->root_window);
@@ -1217,14 +1218,9 @@ static inline void commit_cursor(window *win, mode edit_mode )
     }
 }
 
-
 static inline void reset_window_cursor(screen *screen, mode edit_mode)
 {
     window *win = screen->active_window;
-    // commit_cursor(win, edit_mode);
-
-
-    // win->bcy = win->dcy;
 
     u16 w_screen_y = get_screen_y(screen, win);
     u16 w_screen_x = get_screen_x(screen, win);
@@ -1232,7 +1228,17 @@ static inline void reset_window_cursor(screen *screen, mode edit_mode)
     u16 window_cy = w_screen_y + (u16)(win->bc.y - win->top_line);
     u16 window_cx = w_screen_x + (u16)(win->bc.x - win->cx_offset);
 
-    win->cx = window_cx;
+    u32 i = 0;
+    u32 new_cx = w_screen_x;
+
+    while (window_cx > w_screen_x)
+    {
+        new_cx += win->view.grid->v_cols[window_cy * screen->cols + i];
+        i++;
+        window_cx--;
+    }
+
+    win->cx = new_cx;
     win->cy = window_cy;
 }
 

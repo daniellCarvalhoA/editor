@@ -164,8 +164,8 @@ typedef struct
     u16 rows;
     u16 cols;
 
-    grid_type *types;
-
+    u8 *types;
+    u8 *v_cols;
     u8 *text_8;
     u8 *text_16;
     u8 *text_24;
@@ -180,6 +180,7 @@ static inline void free_multilevel_grid(multilevel_grid *grid)
     free(grid->types);
     free(grid->text_8);
     free(grid->attr);
+    free(grid->v_cols);
 
     if (grid->text_16)
     {
@@ -206,12 +207,13 @@ static inline void resize_multilevel_grid(
     grid->rows = new_rows;
     grid->cols = new_cols;
 
-    grid->types = (grid_type *) realloc((void *) grid->types, new_size * sizeof(grid_type));
+    grid->types = (u8 *) realloc((void *) grid->types, new_size * sizeof(grid_type));
     // memset(grid->types, U8, new_size * sizeof(grid_type));
 
     grid->text_8 = (u8 *) realloc((void *) grid->text_8, new_size * sizeof(u8));
     grid->attr   = (attr *) realloc((void *) grid->attr, new_size * sizeof(attr));
-    memset(grid->attr, 8, new_size * sizeof(attr));
+    grid->v_cols = (u8 *) realloc((void *) grid->v_cols, new_size * sizeof(u8));
+    // memset(grid->attr, 8, new_size * sizeof(attr));
     // memset(grid->types, ' ', new_size * sizeof(u8));
 
     if (grid->text_16)
@@ -256,7 +258,6 @@ static inline grid_view default_grid_view(
     u16 height,
     u16 width)
 {
-    
     grid_view result = {
         .grid  = grid,
         .y_offset = y_offset,
@@ -290,10 +291,12 @@ static inline void initialize_multilevel_grid(multilevel_grid *grid, u32 rows, u
     grid->types     = malloc(sizeof(grid_type) * num_cells);
     grid->text_8    = malloc(sizeof(u8) * num_cells);
     grid->attr      = malloc(sizeof(attr) * num_cells);
+    grid->v_cols    = malloc(sizeof(u8) * num_cells);
 
     memset(grid->types, U8, sizeof(grid_type) * num_cells);
     memset(grid->text_8, ' ', sizeof(u8) * num_cells);
     memset(grid->attr, Default, sizeof(attr) *  num_cells);
+    memset(grid->v_cols, 1, sizeof(u8) * num_cells);
 
     grid->text_16   = 0;
     grid->text_24   = 0;
@@ -303,19 +306,20 @@ static inline void initialize_multilevel_grid(multilevel_grid *grid, u32 rows, u
 typedef struct
 {
     u8 *data;
-    grid_type *type; 
+    u8 *type; 
+    u8 *vcols;
     attr *attr;
 } s_cell;
 
-static inline grid_type get_cell_type(grid_line line, u32 idx)
+static inline u8 get_cell_type(grid_line line, u32 idx)
 {
-    grid_type result = line.grid->types[line.line_start + idx];
+    u8 result = line.grid->types[line.line_start + idx];
     return result;
 }
 
-static inline grid_type *get_cell_type_(grid_line line, u32 idx)
+static inline u8 *get_cell_type_(grid_line line, u32 idx)
 {
-    grid_type *result = line.grid->types + line.line_start + idx;
+    u8 *result = line.grid->types + line.line_start + idx;
     return result;
 }
 
@@ -323,6 +327,18 @@ static inline attr get_cell_attr(grid_line line, u32 idx)
 {
     attr attr = line.grid->attr[line.line_start + idx];
     return attr;
+}
+
+static inline u8 get_cell_vcol(grid_line line, u32 idx)
+{
+    u8 col = line.grid->v_cols[line.line_start + idx];
+    return col;
+}
+
+static inline u8 *get_cell_vcol_(grid_line line, u32 idx)
+{
+    u8 *col = line.grid->v_cols + line.line_start + idx;
+    return col;
 }
 
 static inline attr *get_cell_attr_(grid_line line, u32 idx)
@@ -347,11 +363,12 @@ static inline u8 *get_cell_data(grid_line line, u32 idx, grid_type type)
 
 static inline s_cell get_cell(grid_line line, u32 idx)
 {
-    grid_type *type = get_cell_type_(line, idx);
+    u8 *type = get_cell_type_(line, idx);
     u8 *data = get_cell_data(line, idx, *type);
     attr *attr = get_cell_attr_(line, idx);
+    u8 *vcols = get_cell_vcol_(line, idx);
 
-    s_cell result = { .data = data, .type = type, .attr = attr };
+    s_cell result = { .data = data, .type = type, .attr = attr, .vcols = vcols };
     return result;
 }
 
@@ -377,12 +394,14 @@ static inline void copy_cells(grid_line dst, grid_line src, u32 idx, u32 len)
 {
     s_cell src_cell = get_cell(src, idx);
     dst.grid->types[dst.line_start + idx] = *src_cell.type;
-    u8 *dst_data          = get_cell_data(dst, idx, *src_cell.type);
-    grid_type *dst_types = get_cell_type_(dst, idx);
+    u8 *dst_data  = get_cell_data(dst, idx, *src_cell.type);
+    u8 *dst_types = get_cell_type_(dst, idx);
+    u8 *dst_vcols = get_cell_vcol_(dst, idx);
     attr *dst_attr        = get_cell_attr_(dst, idx);
     memcpy((void *) dst_data, (const void *) src_cell.data, len * sizeof(u8) * (*src_cell.type + 1));
-    memcpy((void *) dst_types, (const void *) src_cell.type, len * sizeof(grid_type));
+    memcpy((void *) dst_types, (const void *) src_cell.type, len * sizeof(u8));
     memcpy((void *) dst_attr, (const void *) src_cell.attr, len * sizeof(attr));
+    memcpy((void *) dst_vcols, (const void *) src_cell.vcols, len * sizeof(u8));
 }
 
 static inline void copy_cell_(grid_line dst, grid_line src, u32 dst_idx, u32 src_idx)
@@ -392,18 +411,22 @@ static inline void copy_cell_(grid_line dst, grid_line src, u32 dst_idx, u32 src
     memcpy((void *) dst_data, (const void *) src_cell.data, sizeof(u8) * (*src_cell.type + 1));
     dst.grid->types[dst.line_start + dst_idx] = *src_cell.type;
     dst.grid->attr[dst.line_start + dst_idx] = *src_cell.attr;
+    dst.grid->v_cols[dst.line_start + dst_idx] = *src_cell.vcols;
 }
 
 static inline b32 cells_are_equal_(grid_line a, grid_line b, u32 a_index, u32 b_index)
 {
-    grid_type a_type = get_cell_type(a, a_index);
-    grid_type b_type = get_cell_type(b, b_index);;
+    u8 a_type = get_cell_type(a, a_index);
+    u8 b_type = get_cell_type(b, b_index);
 
     attr a_attr = get_cell_attr(a, a_index);
     attr b_attr = get_cell_attr(b, b_index);
 
+    u8 a_col = get_cell_vcol(a, a_index);
+    u8 b_col = get_cell_vcol(b, b_index);
+
     b32 result = false;
-    if (a_type == b_type && a_attr == b_attr)
+    if (a_type == b_type && a_attr == b_attr && a_col == b_col)
     {
         u8 *s1 = get_cell_data(a, a_index, a_type);
         u8 *s2 = get_cell_data(b, b_index, b_type);
@@ -412,7 +435,7 @@ static inline b32 cells_are_equal_(grid_line a, grid_line b, u32 a_index, u32 b_
     }
     return result;
 }
-
+#if 0
 static inline b32 cells_are_equal(grid_line a, grid_line b, u32 index)
 {
     grid_type a_type = get_cell_type(a, index);
@@ -431,7 +454,7 @@ static inline b32 cells_are_equal(grid_line a, grid_line b, u32 index)
     }
     return result;
 }
-
+#endif
 // static void prepend(u16 *line_offsets, u16 offset, u32 count) 
 // {
 //     Assert(line_offsets);

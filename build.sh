@@ -6,7 +6,7 @@ LOCKFILE="/tmp/e.lock"
 
 touch $LOCKFILE
 
-CommonFlags="-DDEBUG -Wall -Werror -g -Wextra   -Wno-unused-function  -fsanitize=address -Wno-unused-parameter -Wno-unused-variable -DCOMPILER_GCC=1 -std=gnu99 -D_GNU_SOURCE"
+CommonFlags="-DDEBUG -Wall -Werror -g -Wextra -Wno-unused-function -fsanitize=address -Wno-unused-parameter  -DCOMPILER_GCC=1 -std=gnu99 -D_GNU_SOURCE"
 
 # -fsanitize=address 
 

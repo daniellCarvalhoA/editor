@@ -1,10 +1,13 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
 #include <fcntl.h>
 #include <dlfcn.h>
 #include <semaphore.h>
 
-#include "e.h"
+// #include "e.h"
+#include "e_share.h"
+#include "memory.h"
 #include "prng.c"
 
 #define NUM_TESTS 1000
@@ -52,7 +55,7 @@ typedef struct work_queue
 
 static WORK_QUEUE_CALLBACK(do_test_work)
 {
-    void *code = dlopen("/home/paula/c/e/build/tests.so", RTLD_LAZY);
+    void *code = dlopen("/home/daniel/c/e/build/tests.so", RTLD_LAZY);
     if (code)
     {
         function_test *test = (function_test *) dlsym(code, test_name);

@@ -4,7 +4,56 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+typedef int8_t int8;
+typedef int16_t int16;
+typedef int32_t int32;
+typedef int64_t int64;
+typedef int32 bool32;
+
+typedef uint8_t uint8;
+typedef uint16_t uint16;
+typedef uint32_t uint32;
+typedef uint64_t uint64;
+typedef __uint128_t u128;
+
+typedef intptr_t intptr;
+typedef uintptr_t uintptr;
+
+typedef size_t memory_index;
+    
+typedef float real32;
+typedef double real64;
+    
+typedef int8 i8;
+typedef int16 i16;
+typedef int32 i32;
+typedef int64 i64;
+typedef bool32 b32;
+
+typedef uint8 u8;
+typedef uint16 u16;
+typedef uint32 u32;
+typedef uint64 u64;
+
+typedef real32 r32;
+typedef real64 r64;
+
+typedef uintptr_t umm;
+typedef u8 b8;
+typedef u8 b16;
+
 #include "g_array.h"
+
+#define ArrayCount(array) (sizeof(array) / sizeof((array)[0]))
+
+#define Kilobytes(value) ((value) * 1024LL)
+#define Megabytes(value) (Kilobytes(value) * 1024LL)
+#define Gigabytes(value) (Megabytes(value) * 1024LL)
+#define Terabytes(value) (Gigabytes(value) * 1024LL)
+
 #define Assert(expression) if(!(expression))\
   { fprintf(stderr, "Assert failed in: %d of file: %s\n", __LINE__, __FILE__); *(int *)0 = 0; }
 
@@ -98,8 +147,13 @@ typedef struct string
     u8 *buffer;
 } string;
 
-static string char_str_to_string(
-    char *str)
+typedef struct 
+{
+    u32 len;
+    u8 *buffer;
+} str;
+
+static string char_str_to_string(char *str)
 {
     u32 len = str_len(str);
     string result = { .len = len, .buffer = (u8 *)str, .capacity = len };
@@ -141,15 +195,12 @@ static u32 count_rev_until(string s, u32 token)
     return result;
 }
 
-static inline void null_terminate(
-    string *s)
+static inline void null_terminate(string *s)
 {
     s->buffer[s->len] = '\0';
 }
 
-static u64 int_to_string(
-    u64 value,
-    u8 *buf)
+static u64 int_to_string(u64 value, u8 *buf)
 {
     u32 len = 0;
     do 
@@ -173,8 +224,7 @@ static u64 int_to_string(
     return len;
 }
 
-static u32 str_len(
-    const char *str)
+static u32 str_len(const char *str)
 {
     u32 count = 0;
 
@@ -205,9 +255,7 @@ static void cat_strings(
     *dst++ = 0;
 }
 
-static b32 strings_are_equal(
-    const char *a,
-    const char *b)
+static b32 strings_are_equal(const char *a, const char *b)
 {
     Assert(a);
     Assert(b);

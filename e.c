@@ -12,6 +12,7 @@
 #include "screen.c"
 #include "command.c"
 #include "paste_buffer.c"
+#include "motions.c"
 #include "normal.c"
 #include "insert_mode.c"
 

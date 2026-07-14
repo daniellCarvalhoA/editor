@@ -6,7 +6,7 @@ static inline b32 is_empty(paste_buffer *buffer)
 }
 static inline void free_paste_buffer(paste_buffer *buffer)
 {
-    history *history = &buffer->buffer->undo_history;
+    history *history = &buffer->buffer->history;
     if (buffer->count)
     {
         Assert(buffer->pieces);

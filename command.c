@@ -1,4 +1,20 @@
 
+static command_buffer allocate_command_buffer(u32 capacity)
+{
+    command_buffer buffer = {};
+    buffer.capacity = capacity;
+    buffer.buffer = (u8 *) malloc(sizeof(u8) * capacity);
+    return buffer;
+}
+
+static void free_command_buffer(command_buffer *buffer)
+{
+    if (buffer && buffer->buffer)
+    {
+        free(buffer->buffer);
+    }
+}
+
 typedef enum
 {
     ParseFlags_Error = 0x0,
@@ -217,7 +233,8 @@ static b32 process_command(editor_state *state)
 
         close_active_window(&state->screen);
 
-        result = list_is_empty(&state->buffers);
+        // NOTE. This is a hack. 
+        result = (state->screen.active_window == state->screen.command_window);
 
     }
     clear_buffer(&state->screen.command_window->c_buffer);

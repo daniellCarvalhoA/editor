@@ -278,35 +278,35 @@ static inline void line_lens(const model *model, u32 *buf, const u32 start, cons
     *buf = model->s.len - prev_line_position;
 }
 
-static inline lines_result model_num_lines_from(
-    const model *model,
-    u32 start,
-    u32 row_size,
-    u32 num_rows)
-{
-    u32 end = num_lcnts(model) + 1;
-    u32 len = end - start;
-    u32 *lens = malloc(sizeof(u32) * len);
-    line_lens(model, lens, start, end);
-
-    lines_result result = {};
-    for (u32 i = 0; i < len; ++i)
-    {
-        u32 rows_size = num_rows * row_size;
-        u32 length = lens[i];
-        if (length > num_rows * row_size)
-        {
-            result.rows_in = rows_size;
-            result.rows_out  = length - result.rows_in;
-            break;
-        }
-        result.num_lines++;
-        num_rows -= 1 + length / row_size;
-    }
-
-    free(lens);
-    return result;
-}
+// static inline lines_result model_num_lines_from(
+    // const model *model,
+    // u32 start,
+    // u32 row_size,
+    // u32 num_rows)
+// {
+    // u32 end = num_lcnts(model) + 1;
+    // u32 len = end - start;
+    // u32 *lens = malloc(sizeof(u32) * len);
+    // line_lens(model, lens, start, end);
+// 
+    // lines_result result = {};
+    // for (u32 i = 0; i < len; ++i)
+    // {
+        // u32 rows_size = num_rows * row_size;
+        // u32 length = lens[i];
+        // if (length > num_rows * row_size)
+        // {
+            // result.rows_in = rows_size;
+            // result.rows_out  = length - result.rows_in;
+            // break;
+        // }
+        // result.num_lines++;
+        // num_rows -= 1 + length / row_size;
+    // }
+// 
+    // free(lens);
+    // return result;
+// }
 
 static void model_replace(model *model, u32 start, u32 end, string s)
 {
