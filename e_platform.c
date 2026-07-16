@@ -382,7 +382,8 @@ int main(int argc, char **argv)
 
     Platform = memory.Platform;
 
-    if (code.update_and_render(&memory, 0, 0, argc, (void **) argv))
+    str s = {};
+    if (code.update_and_render(&memory, s, argc, (void **) argv))
     {
         return 1;
     }
@@ -409,10 +410,11 @@ int main(int argc, char **argv)
 
                 u8 buffer[4];
                 i32 num_read = read(STDIN_FILENO, buffer, 4);
+                str s = { .buffer = buffer, .len = num_read };
 
                 if (num_read > 0)
                 {
-                    if (code.update_and_render(&memory, buffer, num_read, argc, (void **) argv))
+                    if (code.update_and_render(&memory, s, argc, (void **) argv))
                     {
                         break;
                     }

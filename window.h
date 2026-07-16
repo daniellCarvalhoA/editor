@@ -1,11 +1,20 @@
 
-typedef enum mode
+typedef enum 
 {
     Normal,
     Layout,
     Insert,
     Visual,
+    LineVisual,
+    BlockVisual,
 } mode;
+
+static inline b32 is_visual(mode mode) 
+{
+    b32 result = (mode >= Visual);
+    return result;
+}
+
 
 typedef buffer_cursor win_cursor;
 

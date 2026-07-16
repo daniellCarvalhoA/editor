@@ -16,7 +16,13 @@ static inline void free_paste_buffer(paste_buffer *buffer)
     {
         free_undo_memory_block(history, buffer->header);
     }
-    memset(buffer, 0, sizeof(paste_buffer));
+    buffer->buffer = 0;
+    buffer->start = 0;
+    buffer->end = 0;
+    buffer->count = 0;
+    buffer->flags = 0;
+    buffer->pieces = 0;
+    buffer->type = 0;
 }
 
 static inline piece *get_pieces(paste_buffer *buffer)

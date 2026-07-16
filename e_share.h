@@ -153,6 +153,25 @@ typedef struct
     u8 *buffer;
 } str;
 
+static inline str from_string(string s)
+{
+    str result = { .buffer = s.buffer, .len = s.len };
+    return result;
+}
+
+static inline u32 count_lines(str s)
+{
+    u32 result = 0;
+    for (u32 i = 0; i < s.len; ++i)
+    {
+        if (s.buffer[i] == '\n')
+        {
+            result++;
+        }
+    }
+    return result;
+}
+
 static string char_str_to_string(char *str)
 {
     u32 len = str_len(str);

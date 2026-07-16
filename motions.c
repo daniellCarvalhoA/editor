@@ -1,113 +1,200 @@
 
-static void move_by_motion(
+static gen_buffer_position get_cursor_from_motion(
     window *win,
-    motion motion,
-    u32 quantifier,
-    u8 *match_str,
-    u32 match_str_len)
+    motion_spec m_spec)
 {
-    quantifier = Maximum(1, quantifier);
-    switch (motion)
+    gen_buffer_position result = {};
+    switch (m_spec.edit_motion)
     {
-        case MotionCount:
-        case NoMotion:
-        {
-            win->dc = win->bc;
-        } break;
-
         case Up:
         {
-            win->dc.y = saturating_sub(win->bc.y, quantifier);
-
+            result.y = saturating_sub(result.y, m_spec.quantifier);
         } break;
 
         case Down:
         {
-            win->dc.y = clamped_add(win->bc.y, quantifier, win->buffer->lcnt);
+            result.y = win->bc.y + m_spec.quantifier;
         } break;
 
         case Left:
         {
-            win->dc.x= saturating_sub(win->bc.x, quantifier);
+            result.y = win->bc.y;
+            result.x = saturating_sub(win->bc.x, m_spec.quantifier);
         } break;
 
         case Right:
         {
-            win->dc.x = win->bc.x + quantifier;
+            result.y = win->bc.y;
+            result.x = win->bc.x + m_spec.quantifier;
         } break;
 
         case Absolute:
         {
-            win->dc.y = Minimum(quantifier, win->buffer->lcnt);
+            result.y = m_spec.quantifier;
         } break;
 
         case Dollar:
         {
+            u32 quantifier = m_spec.quantifier;
             if (quantifier > 0)
             {
                 --quantifier;
             }
 
-            win->dc.y = Minimum(win->bc.y + quantifier, win->buffer->lcnt);
-            move_by_motion(win, Right, UINT32_MAX - win->bc.x, NULL, 0);
+            result.y = win->bc.y + quantifier;
+            result.x = UINT32_MAX;
 
-        } break;
-
-        case Zero:
-        {
-            win->dc.x = 0;
         } break;
 
         case Underscore:
         {
-            base_iter iter = find_non_white_space(&win->buffer->iter, win->bc.y);
-            win->dc.x = position(&iter) - get_position(&win->buffer->iter);
+            result.type = NotMatch;
+            result.match_str = (u8 *) " ";
+            result.match_str_len = 1;
+            result.y = win->bc.y;
+            result.x = 0;
+        } break;
+
+        case Zero:
+        {
+            result.y = win->bc.y;
+            result.x = 0;
         } break;
 
         case Search:
         {
-            // NOTE: Calculate the length properly:
-            buffer_cursor bc = { .y = win->bc.y, .x = win->bc.x + 1 };
-            base_iter iter = find_char(
-                &win->buffer->iter,
-                match_str,
-                match_str_len,
-                bc);
-            win->dc.x = position(&iter) - get_position(&win->buffer->iter);
-
+            result.y = win->bc.y;
+            result.x = win->bc.x;
+            result.type          = Match;
+            result.match_str     = m_spec.match_str;
+            result.match_str_len = m_spec.match_str_len;
         } break;
+
+        default: 
+        {
+        } break;
+    }
+    return result;
+}
+
+static inline u32 clamp_to_length(
+    piece_list *list,
+    const u32 cy,
+    const u32 cx,
+    b32 exclusive)
+{
+    u32 result = cx;
+    u32 line_len = get_line_len_(&list->iter, cy);
+    if (cx >= line_len)
+    {
+        result = line_len;
+        if ((result > 0) && exclusive)
+        {
+            result--;
+        }
+    }
+    return result;
+
+}
+
+static void move_by_motion(
+    window *win,
+    motion motion,
+    u32 quantifier,
+    str match_str,
+    b32 exclusive)
+{
+    quantifier = Maximum(1, quantifier);
+    switch (motion)
+    {
+         case MotionCount:
+         case NoMotion:
+         {
+             win->dc = win->bc;
+         } break;
+ 
+         case Up:
+         {
+             win->bc.y = saturating_sub(win->bc.y, quantifier);
+             win->bc.x = clamp_to_length(
+                 win->buffer,
+                 win->bc.y,
+                 win->dc.x,
+                 exclusive);
+         } break;
+ 
+         case Down:
+         {
+             win->bc.y = clamped_add(win->bc.y, quantifier, win->buffer->lcnt);
+             win->bc.x = clamp_to_length(
+                 win->buffer,
+                 win->bc.y,
+                 win->dc.x,
+                 exclusive);
+         } break;
+ 
+         case Left:
+         {
+             win->dc.x = win->bc.x = saturating_sub(win->bc.x, quantifier);
+         } break;
+ 
+         case Right:
+         {
+             win->dc.x = win->bc.x = clamp_to_length(
+                 win->buffer,
+                 win->bc.y, 
+                 win->bc.x + quantifier,
+                 exclusive);
+         } break;
+ 
+         case Absolute:
+         {
+             win->bc.y = Minimum(quantifier, win->buffer->lcnt);
+         } break;
+ 
+         case Dollar:
+         {
+             if (quantifier > 0)
+             {
+                 --quantifier;
+             }
+ 
+             win->bc.y = clamped_add(win->bc.y, quantifier, win->buffer->lcnt);
+             win->dc.x = win->bc.x = clamp_to_length(
+                 win->buffer,
+                 win->bc.y,
+                 UINT32_MAX,
+                 exclusive);
+ 
+         } break;
+ 
+         case Zero:
+         {
+             win->dc.x = win->bc.x = 0;
+         } break;
+ 
+         case Underscore:
+         {
+             win->dc.x = win->bc.x = skip_space(&win->buffer->iter, win->bc.y);
+ 
+         } break;
+ 
+         case Search:
+         {
+             // NOTE: Calculate the length properly:
+             buffer_cursor bc = { .y = win->bc.y, .x = win->bc.x + 1};
+             win->dc.x = win->bc.x = find_char(&win->buffer->iter, match_str,  bc);
+ 
+         } break;
      }
 }
 
-// static win_cursor get_desired_cursor(
-//     window *win,
-//     motion motion,
-//     u32 quantifier,
-//     u8 *match_str,
-//     u32 match_str_len)
-// {
-//     win_cursor dc = {} ;
-//     switch (motion)
-//     {
-//         case Up:
-//         {
-//             dc.x = 0;
-//             dc.y = saturating_sub(win->bc.y, quantifier + 1);
-//         } break;
-//
-//         case Down:
-//         {
-//
-//         } break;
-//     }
-// }
 
 static win_range get_motion_range(
     window *win,
     motion motion,
     u32 quantifier,
-    u8 *match_str,
-    u32 match_str_len)
+    str s)
 {
     win_range result = {};
     quantifier = Maximum(1, quantifier);
@@ -127,8 +214,7 @@ static win_range get_motion_range(
             result.first.y = win->bc.y;
             result.first.x = 0;
             result.one_past_end.x = 0;
-            result.one_past_end.y = 
-                clamped_add(win->bc.y, quantifier, win->buffer->lcnt);
+            result.one_past_end.y = clamped_add(win->bc.y, quantifier, win->buffer->lcnt);
         } break;
 
         case Left:
@@ -142,20 +228,24 @@ static win_range get_motion_range(
         {
             result.first = win->bc;
             result.one_past_end.y = win->bc.y;
-            Assert(quantifier < UINT32_MAX - win->bc.x);
             // This will clamped
-            result.one_past_end.x = win->bc.x + quantifier;
+            result.one_past_end.x = clamp_to_length(
+                win->buffer,
+                win->bc.y,
+                win->bc.x + quantifier,
+                false);
         } break;
 
         case Absolute:
         {
+            str s = {};
             if (quantifier < win->bc.y)
             {
-                result = get_motion_range(win, Up, win->bc.y - quantifier, NULL, 0);
+                result = get_motion_range(win, Up, win->bc.y - quantifier, s);
             }
             else if (quantifier > win->bc.y)
             {
-                result = get_motion_range(win, Down, quantifier - win->bc.y, NULL, 0);
+                result = get_motion_range(win, Down, quantifier - win->bc.y, s);
             }
         } break;
 
@@ -163,7 +253,12 @@ static win_range get_motion_range(
         {
             result.first = win->bc;
             result.one_past_end.y = win->bc.y;
-            result.one_past_end.x = UINT32_MAX - win->bc.x;
+            result.one_past_end.x = clamp_to_length(
+                win->buffer,
+                win->bc.y,
+                UINT32_MAX,
+                false);
+            // result.one_past_end.x = UINT32_MAX - win->bc.x;
         } break;
 
         case Zero:
@@ -179,12 +274,7 @@ static win_range get_motion_range(
             result.one_past_end.y = win->bc.y;
 
             buffer_cursor bc = { .y = win->bc.y, .x = win->bc.x + 1 };
-            base_iter iter = find_char(
-                &win->buffer->iter,
-                match_str,
-                match_str_len,
-                bc);
-            result.one_past_end.x = position(&iter) - get_position(&win->buffer->iter);
+            result.one_past_end.x= find_char(&win->buffer->iter, s, bc);
 
         } break;
 
@@ -193,8 +283,7 @@ static win_range get_motion_range(
             result.one_past_end = win->bc;
 
             result.first.y = win->bc.y;
-            base_iter iter = find_non_white_space(&win->buffer->iter, win->bc.y);
-            result.first.x = position(&iter) - get_position(&win->buffer->iter);
+            result.first.x = skip_space(&win->buffer->iter, win->bc.y);
 
         } break;
 
@@ -205,41 +294,48 @@ static win_range get_motion_range(
     return result;
 }
 
+static inline win_range get_visual_range(window *win)
+{
+    win_range result;
+    switch (compare(win->bc, win->vc))
+    {
+        case EqualTo:
+        case LessThan:
+        {
+            result.first = win->bc;
+            result.one_past_end = win->vc;
+        } break;
 
-static win_range get_cursor_range(
+        case GreaterThan:
+        {
+            result.first = win->vc;
+            result.one_past_end = win->bc;
+        } break;
+    }
+
+    result.one_past_end.x++;
+    return result;
+}
+
+static inline win_range get_cursor_range(
     window *win,
     motion motion,
     mode edit_mode,
     u32 quantifier, 
-    u8 *match_str,
-    u32 match_str_len)
+    str s)
 {
 
     win_range result = {};
 
-    if (edit_mode == Visual)
+    // switch 
+
+    if (is_visual(edit_mode))
     {
-        switch (compare(win->bc, win->vc))
-        {
-            case EqualTo:
-            case LessThan:
-            {
-                result.first = win->bc;
-                result.one_past_end = win->vc;
-            } break;
-
-            case GreaterThan:
-            {
-                result.first = win->vc;
-                result.one_past_end = win->bc;
-            } break;
-        }
-
-        result.one_past_end.x++;
+        result = get_visual_range(win);
     }
     else
     {
-        result = get_motion_range(win, motion, quantifier, match_str, match_str_len);
+        result = get_motion_range(win, motion, quantifier, s);
     }
     return result;
 }

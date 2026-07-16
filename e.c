@@ -20,7 +20,7 @@ static void render(editor_state *state)
 {
     // reset_window_cursor(&state->screen, state->edit_mode);
 
-    commit_cursor(state->screen.active_window, state->edit_mode);
+    // commit_cursor(state->screen.active_window, state->edit_mode);
     piece_list *buffer;
     list_for_each_entry(buffer, &state->buffers, list)
     {
@@ -102,7 +102,7 @@ extern UPDATE_AND_RENDER(update_and_render)
         {
             case Insert:
             {
-                if (process_insert(editor, input, input_size))
+                if (process_insert(editor, input))
                 {
                     return true;
                 }
@@ -112,26 +112,29 @@ extern UPDATE_AND_RENDER(update_and_render)
             {
                 if (editor->screen.active_window == editor->screen.command_window)
                 {
-                    if (parse_command(editor, input, input_size))
+                    if (parse_command(editor, input))
                     {
                         return true;
                     }
                 }
                 else
                 {
-                    process_normal(editor, input, input_size);
+                    process_normal(editor, input);
                 }
             } break;
 
             case Layout:
             {
-                process_layout(editor, input, input_size);
+                process_layout(editor, input);
             } break;
 
+            case LineVisual:
+            case BlockVisual:
             case Visual:
             {
-                process_normal(editor, input, input_size);
+                process_normal(editor, input);
             } break;
+
         }
     }
 

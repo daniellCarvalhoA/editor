@@ -1198,25 +1198,27 @@ static inline void map_buffer_to_window(piece_list *buffer, window *window)
     buffer->num_windows++;
 }
 
-static inline void commit_cursor(window *win, mode edit_mode )
-{
-    win->bc = win->dc;
-
-    if (win->layout != LeafCommand)
-    {
-        u32 curr_line_len = get_line_len_(&win->buffer->iter, win->bc.y);
-
-        if (win->bc.x >= curr_line_len)
-        {
-            win->bc.x = curr_line_len;
-        }
-
-        if (curr_line_len && (curr_line_len == win->bc.x) && edit_mode == Normal)
-        {
-            win->bc.x--;
-        }
-    }
-}
+// static inline void commit_cursor(window *win, mode edit_mode )
+// {
+//     win->bc = win->dc;
+//
+//     if (win->layout != LeafCommand)
+//     {
+//         u32 curr_line_len = get_line_len_(&win->buffer->iter, win->bc.y);
+//
+//         if (win->bc.x >= curr_line_len)
+//         {
+//             win->bc.x = curr_line_len;
+//         }
+//
+//         if (curr_line_len && (curr_line_len == win->bc.x) && edit_mode == Normal)
+//         {
+//             win->bc.x--;
+//         }
+//
+//         win->bc.y = Minimum(win->bc.y, win->buffer->lcnt);
+//     }
+// }
 
 static inline void reset_window_cursor(screen *screen, mode edit_mode)
 {
@@ -1270,16 +1272,18 @@ static void render_window(window *win, screen *screen, mode edit_mode)
 
     if (win == screen->active_window && win->layout == LeafBuffer)
     {
-        u32 height = (win->flags & WinFlags_StatusLineVisible) ? (w_height - 1) : w_height;
+        u32 height = (win->flags & WinFlags_StatusLineVisible) ?
+            (w_height - 1) :
+            w_height;
 
-        if (win->dc.y >= win->top_line + height) 
+        if (win->bc.y >= win->top_line + height) 
         {
-            win->top_line += 1 + win->dc.y - (win->top_line + height);
+            win->top_line += 1 + win->bc.y - (win->top_line + height);
             win->change |= Render_ScrollChange;
         } 
-        else if (win->dc.y < win->top_line)
+        else if (win->bc.y < win->top_line)
         {
-            win->top_line = win->dc.y;
+            win->top_line = win->bc.y;
             win->change |= Render_ScrollChange;
         }
 
@@ -1315,9 +1319,9 @@ static void render_window(window *win, screen *screen, mode edit_mode)
     win->change = Render_NoChange;
 }
 
-static void process_layout(editor_state *editor, u8 *input, u32 input_size)
+static void process_layout(editor_state *editor, str input)
 {
-    if (input_size > 1)
+    if (input.len > 1)
     {
         return;
     }
@@ -1325,7 +1329,7 @@ static void process_layout(editor_state *editor, u8 *input, u32 input_size)
     screen *screen = &editor->screen;
     window *active_window = screen->active_window;
 
-    switch (*input)
+    switch (input.buffer[0])
     {
         case ' ':
         {

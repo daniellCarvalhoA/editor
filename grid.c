@@ -107,7 +107,7 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
                 attr *at = get_cell_attr_(g_line, col);
 
                 memset(data, ' ', tab_length);
-                if (edit_mode == Visual) 
+                if (is_visual(edit_mode) )
                 {
                     screen_cursor s_cursor = { 
                         .x = col + tab_length - 1,
@@ -140,7 +140,7 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
                 memcpy(data, (void *) (&item.cell), sizeof(u8) * (type + 1));
                 *at = Default;
 
-                if (edit_mode == Visual) 
+                if (is_visual(edit_mode)) 
                 {
                     screen_cursor s_cursor = { .x = col, .y = line  - win->top_line};
                     win_cursor w_cursor = map_screen_cursor_to_win_cursor(active_window, s_cursor); 

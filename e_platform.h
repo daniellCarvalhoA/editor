@@ -90,7 +90,7 @@ typedef struct editor_memory
 #define PLATFORM_FILE_ERROR(name) void name(platform_file_handle *handle, char *message)
 typedef PLATFORM_FILE_ERROR(platform_file_error);
 
-#define UPDATE_AND_RENDER(name) b32 name(editor_memory *memory, u8 *input, i32 input_size, u32 cmdc, void **cmdl)
+#define UPDATE_AND_RENDER(name) b32 name(editor_memory *memory, str input, u32 cmdc, void **cmdl)
 typedef UPDATE_AND_RENDER(UpdateAndRender);
 
 #define UPDATE_WINDOW_DIM(name) void name(editor_memory *memory)

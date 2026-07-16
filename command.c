@@ -238,26 +238,26 @@ static b32 process_command(editor_state *state)
 
     }
     clear_buffer(&state->screen.command_window->c_buffer);
-    state->screen.command_window->dc.x = 0;
+    state->screen.command_window->bc.x = 0;
 
     return result;
 }
 
-static b32 parse_command(editor_state *state, u8 *input, u32 input_size)
+static b32 parse_command(editor_state *state, str input)
 {
     b32 result = false;
     screen *screen = &state->screen;
     window *active_window = screen->active_window;
 
     active_window->change |= Render_BufferChange;
-    switch (*input)
+    switch (input.buffer[0])
     {
         case '\x1b':
         {
             screen->active_window = interacting_window;
             clear_buffer(&screen->command_window->c_buffer);
-            active_window->dc.x = 0;
-            active_window->dc.y = 0;
+            active_window->bc.x = 0;
+            active_window->bc.y = 0;
         } break;
 
         case '\r':
@@ -270,13 +270,13 @@ static b32 parse_command(editor_state *state, u8 *input, u32 input_size)
         case 127:
         {
             pop(&screen->command_window->c_buffer);
-            active_window->dc.x--;
+            active_window->bc.x--;
         } break;
 
         default:
         {
-            append_char(&screen->command_window->c_buffer, input, input_size);
-            active_window->dc.x++;
+            append_char(&screen->command_window->c_buffer, input);
+            active_window->bc.x++;
         } break;
     }
     return result;

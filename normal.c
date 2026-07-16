@@ -1,6 +1,6 @@
 static void edit(editor_state *state);
 
-static parse_result parse_normal(editor_state *editor, u8 *token, u32 token_len) 
+static parse_result parse_normal(editor_state *editor, str token) 
 {
     parse_result result = Error;
 
@@ -10,24 +10,24 @@ static parse_result parse_normal(editor_state *editor, u8 *token, u32 token_len)
 
     if (p_state->state == Middle && p_state->s_result.motion == Search)
     {
-        s_result->count = token_len;
-        Assert(token_len < ArrayCount(s_result->match));
-        memcpy(&s_result->match, token, token_len);
-        if (editor->edit_mode == Visual)
+        s_result->count = token.len;
+        Assert(token.len < ArrayCount(s_result->match));
+        memcpy(&s_result->match, token.buffer, token.len);
+        if (is_visual(editor->edit_mode))
         {
             (*active_window)->change |= Render_VisualModeCursorChange;
         }
         return Ok;
     }
 
-    if (*token >= '1' && *token <= '9')
+    if (token.buffer[0] >= '1' && token.buffer[0] <= '9')
     {
-        s_result->quantifier = s_result->quantifier * 10 + (*token - '0');
+        s_result->quantifier = s_result->quantifier * 10 + (token.buffer[0] - '0');
         p_state->state = Middle;
         return NotDone;
     }
 
-    switch (*token)
+    switch (token.buffer[0])
     {
         case '.':
         {
@@ -37,15 +37,18 @@ static parse_result parse_normal(editor_state *editor, u8 *token, u32 token_len)
         } break;
         case ':':
         {
-            interacting_window = *active_window;
-            *active_window = editor->screen.command_window;
-            parse_command(editor, token, token_len);
+            if (editor->edit_mode == Normal)
+            {
+                interacting_window = *active_window;
+                *active_window = editor->screen.command_window;
+                parse_command(editor, token);
+            }
             
         } break;
 
         case '\x1b':
         {
-            if (editor->edit_mode == Visual)
+            if (is_visual(editor->edit_mode))
             {
                 s_result->m_mod = NormalChange;
                 (*active_window)->change |= Render_ModeChange;
@@ -54,7 +57,7 @@ static parse_result parse_normal(editor_state *editor, u8 *token, u32 token_len)
         } break;
         case 'v':
         {
-            if (editor->edit_mode == Normal)
+            if (editor->edit_mode != Visual)
             {
                 s_result->m_mod = VisualChange;
                 (*active_window)->vc = (*active_window)->bc;
@@ -126,7 +129,7 @@ static parse_result parse_normal(editor_state *editor, u8 *token, u32 token_len)
 
         case 'y':
         {
-            if (editor->edit_mode == Visual)
+            if (is_visual(editor->edit_mode))
             {
                 s_result->action = Yank;
                 result = Ok;
@@ -147,7 +150,7 @@ static parse_result parse_normal(editor_state *editor, u8 *token, u32 token_len)
 
         case 'd':
         {
-            if (editor->edit_mode == Visual)
+            if (is_visual(editor->edit_mode))
             {
                 s_result->action = Delete;
                 result = Ok;
@@ -167,7 +170,7 @@ static parse_result parse_normal(editor_state *editor, u8 *token, u32 token_len)
 
         case 'c':
         {
-            if (editor->edit_mode == Visual)
+            if (is_visual(editor->edit_mode))
             {
                 s_result->action = Delete;
                 s_result->m_mod = InsertionChange;
@@ -282,57 +285,37 @@ static parse_result parse_normal(editor_state *editor, u8 *token, u32 token_len)
         case 'l':
         {
             s_result->motion = Right;
-            if (editor->edit_mode == Visual)
-            {
-                (*active_window)->change |= Render_VisualModeCursorChange;
-            }
             result = Ok;
         } break;
 
         case 'h':
         {
             s_result->motion = Left;
-            if (editor->edit_mode == Visual)
-            {
-                (*active_window)->change |= Render_VisualModeCursorChange;
-            }
             result = Ok;
         } break;
 
         case 'k':
         {
             s_result->motion = Up;
-            if (editor->edit_mode == Visual)
-            {
-                (*active_window)->change |= Render_VisualModeCursorChange;
-            }
             result = Ok;
         } break;
 
         case 'j':
         {
             s_result->motion = Down;
-            if (editor->edit_mode == Visual)
-            {
-                (*active_window)->change |= Render_VisualModeCursorChange;
-            }
             result = Ok;
         } break;
 
         case 'G':
         {
             s_result->motion = Absolute;
-            if (s_result->quantifier)
+            if (!s_result->quantifier)
             {
                 s_result->quantifier = UINT32_MAX;
             }
             else
             {
                 s_result->quantifier--;
-            }
-            if (editor->edit_mode == Visual)
-            {
-                (*active_window)->change |= Render_VisualModeCursorChange;
             }
             result = Ok;
         } break;
@@ -386,9 +369,6 @@ static inline void change_mode(editor_state *state, state_result *s_result )
         case InsertionChange:
         {
             state->edit_mode = Insert;
-            s_result->inserted = 
-                state->screen.active_window->buffer->append.text + 
-                state->screen.active_window->buffer->append.text_len;
             s_result->action = Insertion;
         } break;
 
@@ -408,20 +388,24 @@ static inline void change_mode(editor_state *state, state_result *s_result )
     }
 }
 
-static void yank(window *win, paste_buffer *p_buffer, mode edit_mode, state_result s_result)
+static void yank(
+    window *win,
+    paste_buffer *p_buffer,
+    mode edit_mode,
+    state_result *s_result)
 {
     if (p_buffer->buffer)
     {
         free_paste_buffer(p_buffer);
     }
 
+    str match_str = { .buffer = s_result->match, .len = s_result->count };
     win_range w_range = get_cursor_range(
         win,
-        s_result.motion,
-        s_result.quantifier,
+        s_result->motion,
+        s_result->quantifier,
         edit_mode,
-        s_result.match,
-        s_result.count);
+        match_str);
     win->dc = w_range.first;
 
     replace_result rep = yank_(win->buffer, w_range.first, w_range.one_past_end);
@@ -432,30 +416,31 @@ static void yank(window *win, paste_buffer *p_buffer, mode edit_mode, state_resu
     p_buffer->end    = rep.end;
     p_buffer->flags  = rep.flags;
     p_buffer->count  = rep.count;
-    p_buffer->type   = paste_type_from_motion(s_result.motion, edit_mode);
+    p_buffer->type   = paste_type_from_motion(s_result->motion, edit_mode);
 }
 
 static undo_node *change(
     window *win,
     paste_buffer *p_buffer,
-    mode edit_mode,
-    state_result s_result)
+    win_range w_range,
+    str inserted)
 {
-    Assert(p_buffer);
-    if (p_buffer->buffer)
+    // Assert(p_buffer);
+    if (p_buffer && p_buffer->buffer)
     {
         free_paste_buffer(p_buffer);
     }
 
-    win_range w_range = get_cursor_range(
-        win,
-        s_result.motion,
-        s_result.quantifier,
-        edit_mode,
-        s_result.match,
-        s_result.count);
-
-    win->dc = w_range.first;
+    // str match_str = { .buffer = s_result->match, .len = s_result->count };
+    // win_range w_range = get_cursor_range(
+    //     win,
+    //     s_result->motion,
+    //     edit_mode,
+    //     s_result->quantifier,
+    //     match_str);
+    //
+    //
+    // win->dc = w_range.first;
 
     undo_node *node = allocate_tree_node(&win->buffer->history_arena);
     node->bc = win->bc;
@@ -465,12 +450,12 @@ static undo_node *change(
 
     // Assert(!s_result.inserted_count);
 
-    if (s_result.inserted_count > 0 && s_result.inserted) 
+    if (inserted.len > 0 && inserted.buffer) 
     {
         // NOTE: This below is necessary because the append buffer is per piece_buffer,
         // this does not have to be the case.
-        if ((s_result.inserted >= win->buffer->append.text) && 
-            (s_result.inserted < win->buffer->append.text + win->buffer->append.text_len))
+        if ((inserted.buffer >= win->buffer->append.text) && 
+            (inserted.buffer < win->buffer->append.text + win->buffer->append.text_len))
         {
             // Last inserted was in this buffer
             // TODO: don't copy the text to the append buffer.
@@ -480,16 +465,17 @@ static undo_node *change(
             // Must copy text to buffer,
         }
 
-        piece = make_piece(win->buffer, s_result.inserted, s_result.inserted_count);
+        piece = make_piece(win->buffer, inserted);
         p_range.count = 1;
         p_range.pieces = &piece;
 
         // NOTE: this is wrong, inserted_count is in bytes / this must 
         // be in grapheme clusters.
         // Its is also wrong becaus it assumes a one line insertion.
-        win->dc.x += s_result.inserted_count;
+        win->dc.x += inserted.len;
 
     }
+
     replace_result rep = range_replace__(
         win->buffer,
         w_range.first,
@@ -498,13 +484,16 @@ static undo_node *change(
 
     rep.undo_header->ref_count++;
 
-    p_buffer->buffer = win->buffer;
-    p_buffer->header = rep.undo_header;
-    p_buffer->start  = rep.start;
-    p_buffer->end    = rep.end;
-    p_buffer->flags  = rep.flags;
-    p_buffer->count  = 0;
-    p_buffer->type   = paste_type_from_motion(s_result.motion, edit_mode);
+    if (p_buffer)
+    {
+        p_buffer->buffer = win->buffer;
+        p_buffer->header = rep.undo_header;
+        p_buffer->start  = rep.start;
+        p_buffer->end    = rep.end;
+        p_buffer->flags  = rep.flags;
+        p_buffer->count  = 0;
+    }
+    // p_buffer->type   = paste_type_from_motion(s_result->motion, edit_mode);
 
     win->buffer->changed = true;
     node->data = rep.undo_header;
@@ -513,53 +502,115 @@ static undo_node *change(
 
 static void edit(editor_state *state)
 {
-    state_result s_result = state->p_state.s_result;
-    normal_parse_state *p_state = &state->p_state;
+    // normal_parse_state *p_state = &state->p_state;
+    state_result *s_result = &state->p_state.s_result;
     window *win = state->screen.active_window;
 
-    u8 *char_pending = p_state->s_result.char_pending;
-    // TODO: Calculate the length properly;
-    u32 char_pending_len = (char_pending) ? 1 : 0;
-
-    switch (s_result.action)
+    switch (s_result->action)
     {
         case NoAction:
         {
-            change_mode(state, &s_result);
+            change_mode(state, s_result);
+            str match_str = { .buffer = s_result->match, .len = s_result->count };
             move_by_motion(
                 win,
-                s_result.motion,
-                s_result.quantifier,
-                char_pending,
-                char_pending_len);
+                s_result->motion,
+                s_result->quantifier,
+                match_str,
+                state->edit_mode != Insert);
+
+            if (s_result->m_mod == InsertionChange)
+            {
+                s_result->inserted.buffer =
+                    win->buffer->append.text +
+                    win->buffer->append.text_len;
+                s_result->inserted.len = 0;
+                s_result->m_mod = NoChange;
+            }
+
+            if (is_visual(state->edit_mode))
+            {
+                win->change |= Render_VisualModeCursorChange;
+
+            }
         } break;
 
         case Insertion:
         {
-            change_mode(state, &s_result);
-            move_by_motion(win, s_result.motion, s_result.quantifier, NULL, 0);
-            commit_cursor(win, state->edit_mode);
+            str s = {};
+            move_by_motion(
+                win,
+                s_result->motion,
+                s_result->quantifier,
+                s,
+                false);
 
-            Assert(s_result.char_pending);
+            if (s_result->inserted.len)
+            {
+                win_range w_range = { win->bc, win->bc };
 
-            insert_mode_insert(win, s_result.char_pending, s_result.count);
-            win->buffer->changed = true;
+                undo_node *node = change(win, NULL, w_range, s_result->inserted);
+
+                insert_node(&win->buffer->history, node);
+
+                win->bc = w_range.first;
+
+                // s_result->m_mode = NoChange;
+            }
+            else
+            {
+                Assert(s_result->char_pending);
+
+                str s = { 
+                    .buffer = s_result->char_pending,
+                    .len = s_result->count 
+                };
+                insert_mode_insert(win, s);
+                win->buffer->changed = true;
+            }
+
+            if (s_result->m_mod == InsertionChange)
+            {
+                s_result->inserted.buffer =
+                    win->buffer->append.text +
+                    win->buffer->append.text_len;
+                s_result->inserted.len = 0;
+            }
+            change_mode(state, s_result);
 
         } break;
 
         case Delete:
         {
-            undo_node *node = change(win, &state->p_buffer, state->edit_mode, s_result);
+            str match_str = { .buffer = s_result->match, .len = s_result->count };
 
-            if (s_result.m_mod == InsertionChange)
+            win_range w_range = get_cursor_range(
+                win,
+                s_result->motion,
+                state->edit_mode,
+                s_result->quantifier,
+                match_str);
+
+            state->p_buffer.type = paste_type_from_motion(
+                s_result->motion,
+                state->edit_mode);
+
+            undo_node *node = change(
+                win,
+                &state->p_buffer,
+                w_range,
+                s_result->inserted);
+
+            if (s_result->m_mod == InsertionChange)
             {
                 win->buffer->staged = node;
                 state->edit_mode = Insert;
-                p_state->s_result.inserted = 
-                    state->screen.active_window->buffer->append.text + 
-                    state->screen.active_window->buffer->append.text_len;
-                p_state->s_result.action = Replace;
-                p_state->s_result.m_mod  = NoChange;
+                s_result->inserted.buffer = 
+                    win->buffer->append.text + 
+                    win->buffer->append.text_len;
+                s_result->inserted.len = 0;
+                s_result->action = Replace;
+                s_result->m_mod  = NoChange;
             }
             else
             {
@@ -567,14 +618,44 @@ static void edit(editor_state *state)
                 state->edit_mode = Normal;
             }
 
+            if (s_result->m_mod == InsertionChange)
+            {
+                s_result->inserted.buffer =
+                    win->buffer->append.text +
+                    win->buffer->append.text_len;
+                s_result->inserted.len = 0;
+            }
+
+            win->bc = w_range.first;
 
         } break;
 
         case Replace:
         {
             Assert(state->edit_mode == Normal);
-            undo_node *node = change(win, &state->p_buffer, state->edit_mode, s_result);
+
+            str match_str = { .buffer = s_result->match, .len = s_result->count };
+
+            state->p_buffer.type = paste_type_from_motion(
+                s_result->motion,
+                state->edit_mode);
+
+            win_range w_range = get_cursor_range(
+                win,
+                s_result->motion,
+                state->edit_mode,
+                s_result->quantifier,
+                match_str);
+
+            undo_node *node = change(
+                win,
+                &state->p_buffer,
+                w_range,
+                s_result->inserted);
+
             insert_node(&win->buffer->history, node);
+
+            win->bc = w_range.first;
         } break;
 
         case Paste:
@@ -593,14 +674,19 @@ static void edit(editor_state *state)
                 };
 
                 piece piece;
-                // Pasting text from another buffer; must serialize the pieces, and copy the text
-                // to the current buffer.
-                // NOTE: Shoule we change the paste buffer owner, specifically if this is the 
-                // default paste buffer. If im pasting from another piece_buffer, isn't it likely
+                // Pasting text from another buffer; must serialize the pieces,
+                // and copy the text to the current buffer.
+                // NOTE: Shoule we change the paste buffer owner,
+                // specifically if this is the default paste buffer.
+                // If im pasting from another piece_buffer, isn't it likely
                 // that I will keep editing that buffer. 
                 if (state->p_buffer.buffer != win->buffer)
                 {
-                    piece = serialize_piece_range_to(state->p_buffer.buffer, win->buffer, p_range);
+                    piece = serialize_piece_range_to(
+                        state->p_buffer.buffer,
+                        win->buffer,
+                        p_range);
+
                     p_range.pieces = &piece;
                     p_range.count  = 1;
                     p_range.start  = 0;
@@ -608,39 +694,60 @@ static void edit(editor_state *state)
                     p_range.flags  = Edit_None;
                 }
 
-                buffer_cursor bc = win->bc;
+                win_range range;
 
-                if (state->p_buffer.type == Line)
+                if (is_visual(state->edit_mode))
                 {
-                    bc.x = 0;
-                    win->dc.x = 0;
-                    if (s_result.p_mod == Next)
+                    range = get_visual_range(win);
+                }
+                else
+                {
+                    buffer_cursor bc = win->bc;
+
+                    if (state->p_buffer.type == Line)
                     {
-                        bc.y++;
-                        win->dc.y++;
+                        bc.x = 0;
+                        win->dc.x = 0;
+                        if (s_result->p_mod == Next)
+                        {
+                            bc.y++;
+                            win->dc.y++;
+                        }
                     }
-                }
-                else if (s_result.p_mod == Next)
-                {
-                    bc.x++;
+                    else if (s_result->p_mod == Next)
+                    {
+                        bc.x++;
+                    }
+
+                    range.first = range.one_past_end = bc;
                 }
 
-                replace_result rep = range_replace__(win->buffer, bc, bc, p_range);
+                replace_result rep = range_replace__(
+                    win->buffer,
+                    range.first,
+                    range.one_past_end,
+                    p_range);
 
                 node->data = rep.undo_header;
 
-                if (p_state->s_result.quantifier > 1)
+                if (s_result->quantifier > 1)
                 {
-                    u32 num_repeat = p_state->s_result.quantifier - 1;
-                    // Try to compress this if possible:  a lot of replaces into a big replace.
+                    u32 num_repeat = s_result->quantifier - 1;
+                    // Try to compress this if possible:
+                    // a lot of replaces into a big replace.
                     while (num_repeat > 0)
                     {
-                        replace_result rep = range_replace__(win->buffer, win->dc, win->dc, p_range);
+                        replace_result rep = range_replace__(
+                            win->buffer,
+                            win->dc,
+                            win->dc,
+                            p_range);
                         LIST_INSERT(node->data->next, rep.undo_header);
                         num_repeat--;
                     }
                 }
                 insert_node(&win->buffer->history, node);
+                state->edit_mode = Normal;
             }
 
         } break;
@@ -658,18 +765,19 @@ static void edit(editor_state *state)
     }
 }
 
-static void process_normal(editor_state *state, u8 *input, u32 input_size)
+static void process_normal(editor_state *state, str s)
 {
-    if (input_size > 1)
+    if (s.len > 1)
     {
         return;
     }
-    switch (parse_normal(state, input, input_size))
+    switch (parse_normal(state, s))
     {
         case Ok:
         {
             edit(state);
-            if (state->p_state.s_result.action != NoAction)
+            if (state->p_state.s_result.action != NoAction || 
+                state->p_state.s_result.m_mod == InsertionChange)
             {
                 state->prev_command = state->p_state.s_result;
             }

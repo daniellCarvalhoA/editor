@@ -15,7 +15,7 @@
 //
 
 
-typedef b32 (*search_pred)(u8 *str, u32 len, u8 *needle, u32 n_len);
+typedef b32 (*search_pred)(u8 *buf, u32 len, str s);
 const u8 utf8_len_table[] = {
     // 1  2  3  4  5  6  7  8  9  A  B  C  D  E  F
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0
@@ -792,19 +792,19 @@ static inline b32 base_next(base_iter *iter)
 #endif
 
 
-static inline b32 is_white_space(u8 *s, u32 len, u8 *needle, u32 n_len)
+static inline b32 is_white_space(u8 *buf, u32 len, str needle)
 {
-    b32 result = (len > 0) && ((*s == ' ') || (*s == '\t'));
+    b32 result = (len > 0) && ((*buf == ' ') || (*buf == '\t'));
     return result;
 }
 
-static inline b32 not_equal_to(u8 *s, u32 len, u8 *needle, u32 n_len)
+static inline b32 not_equal_to(u8 *buf, u32 len, str needle)
 {
     b32 result = true; 
 
-    if (len == n_len)
+    if (len == needle.len)
     {
-        result = (memcmp(s, needle, len) != 0);
+        result = (memcmp(buf, needle.buffer, len) != 0);
     }
     return result;
 }
@@ -823,7 +823,7 @@ static inline b32 base_next_cell_(base_iter *iter)
             iter->abs_idx   += iter->node->count - iter->piece_idx;
             iter->node_line += iter->node->lcnt;
             iter->node_pos  += iter->node->size;
-            iter->piece_idx  = iter->piece_line = iter->piece_pos = iter->pos_in_piece = iter->line_in_piece = 0;
+            iter->piece_idx = iter->piece_line = iter->piece_pos = iter->pos_in_piece = iter->line_in_piece = 0;
             iter->node       = iter->node->next;
         } 
         else if (iter->pos_in_piece >= iter->node->pieces[iter->piece_idx].size)
@@ -1041,7 +1041,8 @@ static inline u8 get_char(base_iter *iter)
 
 static inline str get_char_utf8(base_iter *iter)
 {
-    str result =  {};
+    str result = {};
+
     if (!(iter->type & Position))
     {
         Assert(iter->type & LineNumber);
@@ -1057,18 +1058,20 @@ static inline str get_char_utf8(base_iter *iter)
 
     u32 piece_offset = buffer->lines[piece.off.row] + piece.off.col;
 
-    result.buffer =  buffer->text + piece_offset + iter->pos_in_piece;
-    result.len    = utf8_len_table[result.buffer[0]];
+    result.buffer = buffer->text + piece_offset + iter->pos_in_piece;
+    result.len = utf8_len_table[result.buffer[0]];
     return result;
 }
 
 
-
-static inline b32 base_next_pred(base_iter *iter, search_pred pred, u8 *needle, u32 needle_len)
+static inline b32 base_next_pred(
+    base_iter *iter,
+    search_pred pred,
+    str needle)
 {
     str s = get_char_utf8(iter);
 
-    b32 result = pred(s.buffer, s.len, needle, needle_len) && base_next_cell_(iter);
+    b32 result = pred(s.buffer, s.len, needle) && base_next_cell_(iter);
 
     return result;
 }

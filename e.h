@@ -28,10 +28,12 @@ typedef struct buffer_cursor
 #include "motions.h"
 #include "normal.h"
 
-const char mode_layout_str[] = " Layout | ";
-const char mode_insert_str[] = " Insert | ";
-const char mode_normal_str[] = " Normal | ";
-const char mode_visual_str[] = " Visual | ";
+const char mode_layout_str[] = " LAYOUT | ";
+const char mode_insert_str[] = " INSERT | ";
+const char mode_normal_str[] = " NORMAL | ";
+const char mode_visual_str[] = " VISUAL | ";
+const char mode_line_visual_str[] = " VLINE | "; 
+const char mode_block_viusal_str[] = " VBLOCK | "; 
 
 // mode edit_mode = Normal;
 
@@ -58,7 +60,17 @@ static const char *mode_str(mode edit_mode)
         case Visual:
         {
             result = mode_visual_str;
-        }
+        } break;
+
+        case LineVisual:
+        {
+            result = mode_line_visual_str;
+        } break;
+
+        case BlockVisual:
+        {
+            result = mode_block_viusal_str;
+        } break;
     }
     return result;
 }

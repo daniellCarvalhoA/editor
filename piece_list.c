@@ -148,20 +148,22 @@ static buffer allocate_original_buffer(memory_arena *arena, u8 *original_text, u
     return buffer;
 }
 
-static piece make_piece(piece_list *list, u8 *text, u32 text_len)
+
+
+static piece make_piece(piece_list *list, str s)//  u8 *text, u32 text_len)
 {
     u32 append_len    = list->append.text_len;
     u32 start_row_idx = list->append.num_lines - 1;
     u32 start_row     = list->append.lines[start_row_idx];
     u32 start_col     = list->append.text_len - start_row; 
 
-    Assert(list->append.text_capacity > list->append.text_len + text_len);
-    memcpy(list->append.text + list->append.text_len, text, text_len);
-    list->append.text_len += text_len;
+    Assert(list->append.text_capacity > list->append.text_len + s.len);
+    memcpy(list->append.text + list->append.text_len, s.buffer, s.len);
+    list->append.text_len += s.len;
 
-    for (u32 i = 0; i < text_len; i++)
+    for (u32 i = 0; i < s.len; i++)
     {
-        if (text[i] == '\n')
+        if (s.buffer[i] == '\n')
         {
             Assert(list->append.lines_capacity > list->append.num_lines + 1);
             list->append.lines[list->append.num_lines++] = append_len + i + 1;
@@ -170,7 +172,7 @@ static piece make_piece(piece_list *list, u8 *text, u32 text_len)
 
     u32 end_row_idx = list->append.num_lines - 1;
     piece new_piece;
-    new_piece.size    = text_len;
+    new_piece.size    = s.len;
     new_piece.lcnt    = end_row_idx - start_row_idx;
     new_piece.off.row = start_row_idx;
     new_piece.off.col = start_col;
@@ -179,9 +181,9 @@ static piece make_piece(piece_list *list, u8 *text, u32 text_len)
     return new_piece;
 }
 
-static inline piece make_piece_s(piece_list *list, string s)
+static inline piece make_piece_s(piece_list *list, str s)
 {
-    piece result = make_piece(list, s.buffer, s.len);
+    piece result = make_piece(list, s);
     return result;
 }
 
@@ -271,22 +273,41 @@ static base_iter find_line(base_iter *last_location, u32 line)
 static base_iter find_cursor(base_iter *last_location, buffer_cursor cursor)
 {
     base_iter iter = find_line(last_location, cursor.y);
-    base_advance_by_cell(&iter, cursor.x);
+    // base_advance_by_cell(&iter, cursor.x);
+    u32 count = cursor.x;
+
+    str s = { .buffer = (u8 *) "\n", .len = 1 };
+    while ((count > 0) && base_next_pred(&iter, not_equal_to, s))
+    {
+        count--;
+    }
     return iter;
 }
 
-static base_iter find_non_white_space(base_iter *last_location, u32 cy)
+static u32 skip_space(base_iter *last_location, u32 cy)
 {
+    u32 result = 0;
     base_iter iter = find_line(last_location, cy);
-    while (base_next_pred(&iter, is_white_space, NULL, 0)) {}
-    return iter;
+    str s = {};
+    while (base_next_pred(&iter, is_white_space, s)) 
+    {
+        result++;
+    }
+    return result;
 }
 
-static base_iter find_char(base_iter *last_location, u8 *token, u32 token_len, buffer_cursor cursor)
+static u32 find_char(
+    base_iter *last_location,
+    str match,
+    buffer_cursor cursor)
 {
+    u32 result = cursor.x; 
     base_iter iter = find_cursor(last_location, cursor);
-    while (base_next_pred(&iter, not_equal_to, token, token_len)) {}
-    return iter;
+    while (base_next_pred(&iter, not_equal_to, match)) 
+    {
+        result++;
+    }
+    return result;
 }
 
 static u32 get_line_len_(base_iter *last_location, u32 line)
@@ -2460,7 +2481,7 @@ static replace_result rand_replace_(piece_list *list, prng *prng)
         rand_ascii_string(&s, prng, 1, MAX_STRING_LEN);
         if (s.len > 0)
         {
-            pieces[i] = make_piece_s(list, s);
+            pieces[i] = make_piece_s(list, from_string(s));
         }
     }
 

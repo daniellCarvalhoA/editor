@@ -117,7 +117,7 @@ static undo_memory_header *rand_replace(piece_list *list, prng *prng)
         rand_ascii_string(&s, prng, 1, MAX_STRING_LEN);
         if (s.len > 0)
         {
-            pieces[i] = make_piece_s(list, s);
+            pieces[i] = make_piece_s(list, from_string(s));
         }
     }
 
@@ -171,8 +171,9 @@ static void insert_mode_sequence(window *win, prng *prng, insert_seq_result *seq
             push_string(&seq->text_added, &text);
             for (u32 j = 0; j < text.len; ++j)
             {
-                char c = (char) text.buffer[j];
-                insert_mode_insert(win,  (u8 *) &c, 1);
+                // char c = (char) text.buffer[j];
+                str s = { .buffer = (u8 *) text.buffer + j, .len = 1 };
+                insert_mode_insert(win, s);
             }
         }
         else
@@ -606,13 +607,14 @@ void insert_mode_seq(prng *p)
     window *win_a = create_window(&screen, LeafBuffer, 0);
     map_buffer_to_window(list_a, win_a);
 
+    str s = {};
     u32 cy = rand_range_u32_inclusive(p, 0, list_a->lcnt);
     u32 cx = rand_range_u32_inclusive(p, 0, MAX_LINE_LEN);
     {
         Assert(win_a->bc.y == 0);
 
-        move_by_motion(win_a, Down, cy, NULL, 0);
-        move_by_motion(win_a, Right, cx, NULL, 0);
+        move_by_motion(win_a, Down, cy, s, false);
+        move_by_motion(win_a, Right, cx, s, false);
 
         insert_mode_sequence(win_a, p, seq);
         commit_insert_mode_undo(list_a);
@@ -622,8 +624,8 @@ void insert_mode_seq(prng *p)
     window *win_b = create_window(&screen, LeafBuffer, 0);
     map_buffer_to_window(list_b, win_b);
     {
-        move_by_motion(win_b, Down, cy, NULL, 0);
-        move_by_motion(win_b, Right, cx, NULL, 0);
+        move_by_motion(win_b, Down, cy, s, false);
+        move_by_motion(win_b, Right, cx, s, false);
 
         if (seq->min.x != seq->max.x || seq->min.y != seq->max.y || seq->text_added.len > 0)
         {
@@ -633,7 +635,7 @@ void insert_mode_seq(prng *p)
 
             if (seq->text_added.len > 0)
             {
-                piece piece = make_piece_s(list_b, seq->text_added);
+                piece piece = make_piece_s(list_b, from_string(seq->text_added));
                 node->data = range_replace(list_b, seq->min, seq->max, &piece, 1);
             }
             else
@@ -676,11 +678,12 @@ void insert_mode_seq_2(prng *p)
 
     u32 cy = rand_range_u32_inclusive(p, 0, list_a->lcnt);
     u32 cx = rand_range_u32_inclusive(p, 0, MAX_LINE_LEN);
+    str s = {};
     {
         Assert(win_a->bc.y == 0);
 
-        move_by_motion(win_a, Down, cy, NULL, 0);
-        move_by_motion(win_a, Right, cx, NULL, 0);
+        move_by_motion(win_a, Down, cy, s, false);
+        move_by_motion(win_a, Right, cx, s, false);
 
         insert_mode_sequence(win_a, p, seq);
         commit_insert_mode_undo(list_a);
@@ -690,8 +693,8 @@ void insert_mode_seq_2(prng *p)
     window *win_b = create_window(&screen, LeafBuffer, 0);
     map_buffer_to_window(list_b, win_b);
     {
-        move_by_motion(win_b, Down, cy, NULL, 0);
-        move_by_motion(win_b, Right, cx, NULL, 0);
+        move_by_motion(win_b, Down, cy, s, false);
+        move_by_motion(win_b, Right, cx, s, false);
 
         if (seq->min.x != seq->max.x || seq->min.y != seq->max.y || seq->text_added.len > 0)
         {
@@ -701,7 +704,7 @@ void insert_mode_seq_2(prng *p)
 
             if (seq->text_added.len > 0)
             {
-                piece piece = make_piece_s(list_b, seq->text_added);
+                piece piece = make_piece_s(list_b, from_string(seq->text_added));
                 piece_range p_range = { .pieces = &piece, .count = 1 };
                 replace_result rep = range_replace__(list_b, seq->min, seq->max, p_range);
                 node->data = rep.undo_header;
