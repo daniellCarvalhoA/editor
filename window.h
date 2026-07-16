@@ -279,15 +279,29 @@ static inline u16 get_screen_y(screen *screen, window *win)
     return result;
 }
 
-static inline win_cursor map_screen_cursor_to_win_cursor(window *win, screen_cursor s_cursor)
+static inline win_cursor map_screen_cursor_to_win_cursor(
+    window *win,
+    screen_cursor s_cursor)
 {
-    win_cursor w_cursor = { .x = win->cx_offset + s_cursor.x, .y = win->top_line + s_cursor.y };
+    win_cursor w_cursor = { 
+        .x = win->cx_offset + s_cursor.x,
+        .y = win->top_line + s_cursor.y 
+    };
     return w_cursor;
 }
 
-static inline b32 is_in_range(win_range range, win_cursor cursor)
+static inline b32 is_in_range(win_range range, win_cursor cursor, mode edit_mode)
 {
-    b32 result = compare(cursor, range.first) > LessThan && compare(cursor, range.one_past_end) < GreaterThan;
+    b32 result ;
+    if (edit_mode == Visual)
+    {
+        result = compare(cursor, range.first) > LessThan && 
+                 compare(cursor, range.one_past_end) < GreaterThan;
+    }
+    else
+    {
+        result = cursor.y >= range.first.y && cursor.y <= range.one_past_end.y;
+    }
     return result;
 }
 

@@ -21,6 +21,7 @@ typedef enum
     NoChange,
     InsertionChange,
     VisualChange,
+    LineVisualChange,
     LayoutChange,
     NormalChange,
     ModeModifierCount,

@@ -64,13 +64,30 @@ static parse_result parse_normal(editor_state *editor, str token)
             }
             else
             {
-                Assert(editor->edit_mode == Visual);
+                // Assert(editor->edit_mode == Visual);
                 s_result->m_mod = NormalChange;
 
             }
             (*active_window)->change |= Render_ModeChange;
             result = Ok;
 
+        } break;
+
+        case 'V':
+        {
+            if (editor->edit_mode != LineVisual)
+            {
+                s_result->m_mod = LineVisualChange;
+                (*active_window)->vc = (*active_window)->bc;
+            }
+            else
+            {
+                // Assert(editor->edit_mode == LineVisual);
+                s_result->m_mod = NormalChange;
+
+            }
+            (*active_window)->change |= Render_ModeChange;
+            result = Ok;
         } break;
 
         case ' ':
@@ -375,6 +392,11 @@ static inline void change_mode(editor_state *state, state_result *s_result )
         case LayoutChange:
         {
             state->edit_mode = Layout;
+        } break;
+
+        case LineVisualChange:
+        {
+            state->edit_mode = LineVisual;
         } break;
 
         case VisualChange:
@@ -734,7 +756,7 @@ static void edit(editor_state *state)
                 {
                     u32 num_repeat = s_result->quantifier - 1;
                     // Try to compress this if possible:
-                    // a lot of replaces into a big replace.
+                    // a lot of replaces into a single big replace.
                     while (num_repeat > 0)
                     {
                         replace_result rep = range_replace__(

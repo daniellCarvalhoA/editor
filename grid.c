@@ -117,7 +117,8 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
                         active_window,
                         s_cursor); 
 
-                    if (is_in_range(range, w_cursor) && compare(w_cursor, active_window->bc) != EqualTo)
+                    if (is_in_range(range, w_cursor, edit_mode) && 
+                        compare(w_cursor, active_window->bc) != EqualTo)
                     {
                         memset(at, Reversed, tab_length);
                     }
@@ -143,10 +144,13 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
                 if (is_visual(edit_mode)) 
                 {
                     screen_cursor s_cursor = { .x = col, .y = line  - win->top_line};
-                    win_cursor w_cursor = map_screen_cursor_to_win_cursor(active_window, s_cursor); 
+                    win_cursor w_cursor = map_screen_cursor_to_win_cursor(
+                        active_window,
+                        s_cursor); 
 
 
-                    if (is_in_range(range, w_cursor) && compare(w_cursor, active_window->bc) != EqualTo)
+                    if (is_in_range(range, w_cursor, edit_mode) && 
+                        compare(w_cursor, active_window->bc) != EqualTo)
                     {
                         *at = Reversed;
                     }
