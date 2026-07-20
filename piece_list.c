@@ -27,10 +27,7 @@ typedef struct
 
 static b32 lists_are_equal(const piece_list *a, const piece_list *b)
 {
-    b32 result = 
-        // (a->num_pieces == b->num_pieces) && 
-                 (a->size == b->size) && 
-                 (a->lcnt == b->lcnt);
+    b32 result = (a->size == b->size) && (a->lcnt == b->lcnt);
 
     result = result && buffers_are_equal(&a->original, &b->original);
     result = result && buffers_are_equal(&a->append, &b->append);
@@ -44,22 +41,6 @@ static inline u32 num_logical_lines(piece_list *buffer)
     u32 result = buffer->lcnt + (buffer->size > 0);
     return result;
 }
-//
-// static inline u32 num_logical_lines_(piece_list *buffer)
-// {
-//     base_iter iter = {};
-//     u32 result = buffer->lcnt;
-//     if (base_init_rev_(buffer, LineNumber, &iter))
-//     {
-//         u32 last_line_len = buffer->size - get_position(&iter);
-//
-//         if (last_line_len > 0)
-//         {
-//             result++;
-//         }
-//     }
-//     return result;
-// }
 
 static void list_invariants(piece_list *list)
 {
@@ -70,7 +51,6 @@ static void list_invariants(piece_list *list)
 
     u32 size = 0;
     u32 lcnt = 0;
-    // u32 num_pieces = 0;
     for (segmented_node *node = list->root_sentinel.next; 
         node != &list->root_sentinel;
         node = node->next)
@@ -87,13 +67,9 @@ static void list_invariants(piece_list *list)
         }
         size += node->size;
         lcnt += node->lcnt;
-        // num_pieces += node->count;
     }
     Assert(size == list->size);
     Assert(lcnt == list->lcnt);
-    // Assert(num_pieces == list->num_pieces);
-    // Assert((list->append.num_lines + list->original.num_lines) >= list->lcnt);
-    // Assert((list->append.text_len  + list->original.text_len) >= list->size);
 }
 
 // NOTE: This is very imcomplete and unoptimized
@@ -147,8 +123,6 @@ static buffer allocate_original_buffer(memory_arena *arena, u8 *original_text, u
     buffer.lines_capacity = buffer.num_lines;
     return buffer;
 }
-
-
 
 static piece make_piece(piece_list *list, str s)//  u8 *text, u32 text_len)
 {
@@ -227,7 +201,6 @@ static void move_to_line(piece_list *list, u32 line)
 
     normalize(&list->iter);
 }
-#endif
 static base_iter find_position(base_iter *last_location, u32 position)  
 {
     base_iter iter = *last_location;
@@ -248,6 +221,7 @@ static base_iter find_position(base_iter *last_location, u32 position)
 
     return iter;
 }
+#endif
 
 static base_iter find_line(base_iter *last_location, u32 line)
 {
@@ -296,19 +270,19 @@ static u32 skip_space(base_iter *last_location, u32 cy)
     return result;
 }
 
-static u32 find_char(
-    base_iter *last_location,
-    str match,
-    buffer_cursor cursor)
-{
-    u32 result = cursor.x; 
-    base_iter iter = find_cursor(last_location, cursor);
-    while (base_next_pred(&iter, not_equal_to, match)) 
-    {
-        result++;
-    }
-    return result;
-}
+// static u32 find_char(
+//     base_iter *last_location,
+//     str match,
+//     buffer_cursor cursor)
+// {
+//     u32 result = cursor.x; 
+//     base_iter iter = find_cursor(last_location, cursor);
+//     while (base_next_pred(&iter, not_equal_to, match)) 
+//     {
+//         result++;
+//     }
+//     return result;
+// }
 
 static u32 get_line_len_(base_iter *last_location, u32 line)
 {
@@ -322,6 +296,295 @@ static u32 get_line_len_(base_iter *last_location, u32 line)
 
     return len;
 }
+
+static u32 find_char_back(base_iter *last_location, str match, u32 count, buffer_cursor cursor)
+{
+    u32 result = 0;
+    base_iter iter = find_cursor(last_location, cursor);
+
+    for (; count > 0;)
+    {
+        if (!base_prev_cell(&iter))
+        {
+            result = 0;
+            break;
+        }
+
+        str s = get_char_utf8(&iter);
+        if ((s.len == 1) && memcmp(s.buffer, "\n", 1) == 0)
+        {
+            result = 0;
+        }
+
+        result++;
+        if ((match.len == s.len) && (memcmp(match.buffer, s.buffer, match.len) == 0))
+        {
+            count--;
+        }
+    }
+
+    return cursor.x - result;
+}
+
+static buffer_range find_boundary(base_iter *last_location, u8 open, u8 close, buffer_cursor cursor)
+{
+    // buffer_range br = { cursor, cursor };
+
+    base_iter copy_iter = find_cursor(last_location, cursor);
+    base_iter iter = copy_iter;
+
+
+    buffer_cursor back = cursor;
+
+    // Find back cursor, 
+
+    i32 back_score = 0;
+
+    while (back_score < 1)
+    {
+        if (!base_prev_cell(&iter))
+        {
+            break;
+        }
+
+        str s = get_char_utf8(&iter);
+
+        if (s.buffer[0] == open)
+        {
+            back_score++;
+            back.x--;
+        } 
+        else if (s.buffer[0] == close)
+        {
+            back_score--;
+            back.x--;
+        }
+        else if ((s.len == 1) && memcmp(s.buffer, "\n", 1) == 0)
+        {
+            back.y--;
+            base_iter copy_iter = *last_location;
+            back.x = get_line_len_(&copy_iter, back.y);
+        }
+        else
+        {
+            back.x--;
+        }
+    }
+
+    iter = copy_iter;
+
+    buffer_cursor second_best_first = cursor;
+    buffer_cursor second_best_last = cursor;
+
+    b32 found_second_best = false; 
+
+    i32 second_best_score = 0;
+    // b32 found_second_best
+
+    buffer_cursor forward = cursor;
+    i32 forward_score = 0;
+
+    while (forward_score < 1)
+    {
+        str s = get_char_utf8(&iter);
+        if (!base_next_cell_(&iter))
+        {
+            break;
+        }
+
+
+        if (s.buffer[0] == close)
+        {
+            forward_score++;
+            if (!found_second_best && second_best_score == -1)
+            {
+                found_second_best = true;
+                second_best_last = forward;
+                if (back_score < 1)
+                {
+                    break;
+                }
+            }
+            forward.x++;
+        }
+        else if (s.buffer[0] == open)
+        {
+            forward_score--;
+            if (!found_second_best)
+            {
+                second_best_first = forward;
+                second_best_score--;
+            }
+            forward.x++;
+        }
+        else if ((s.len == 1) && memcmp(s.buffer, "\n", 1) == 0)
+        {
+            forward.y++;
+            forward.x = 0;
+        }
+        else
+        {
+            forward.x++;
+        }
+    }
+
+    buffer_range result = { cursor, cursor };
+
+    if ((back_score == 1) && (forward_score == 1))
+    {
+        result.first = back;
+        result.one_past_end = forward;
+        result.one_past_end.x--;
+    }
+    else if (found_second_best)
+    {
+        result.first = second_best_first;
+        result.one_past_end = second_best_last;
+    }
+
+
+    return result;
+}
+
+
+
+static u32 find_char(base_iter *last_location, str match, u32 count, buffer_cursor cursor)
+{
+    u32 result = 0;
+    base_iter iter = find_cursor(last_location, cursor);
+
+    for (; count > 0;)
+    {
+        if (!base_next_cell_(&iter))
+        {
+            result = 0;
+            break;
+        }
+
+        str s = get_char_utf8(&iter);
+
+        if ((s.len == 1) && (memcmp(s.buffer, "\n", 1) == 0))
+        {
+            result = 0;
+            break;
+        }
+
+        result++;
+        if ((match.len == s.len) && 
+            (memcmp(match.buffer, s.buffer, match.len) == 0))
+        {
+            count--;
+        }
+    }
+    return result + cursor.x;
+}
+
+static buffer_cursor find_word_back(base_iter *last_location, u32 count, buffer_cursor cursor)
+{
+    buffer_cursor result = cursor;
+    base_iter iter = find_cursor(last_location, cursor);
+
+    for (; count > 0; )
+    {
+        // skip non_space
+
+        // skip space;
+        while (base_prev_cell(&iter))
+        {
+            str s = get_char_utf8(&iter);
+            Assert(s.len);
+            // NOTE: IMCOMPLETE/WRONG
+            if (!(s.buffer[0] == ' ' || s.buffer[0] == '\t' || s.buffer[0] == '\n'))
+            {
+                break;
+            }
+            while (result.x == 0)
+            {
+                result.y--;
+                base_iter copy_iter = *last_location;
+                result.x = get_line_len_(&copy_iter, result.y) + 1;
+            }
+            result.x--;
+        }
+        while (base_prev_cell(&iter))
+        {
+            str s = get_char_utf8(&iter);
+            Assert(s.len);
+            if (s.buffer[0] == ' ' || s.buffer[0] == '\t' || s.buffer[0] == '\n')
+            {
+                while (result.x == 0)
+                {
+                    result.y--;
+                    base_iter copy_iter = *last_location;
+                    result.x = get_line_len_(&copy_iter, result.y);
+                }
+                result.x--;
+                break;
+            }
+            result.x--;
+        }
+
+        count--;
+    }
+    return result;
+
+
+}
+
+static buffer_cursor find_word(base_iter *last_location, u32 count, buffer_cursor cursor)
+{
+    buffer_cursor result = cursor;
+    base_iter iter = find_cursor(last_location, cursor);
+
+    for(; count > 0;)
+    {
+        // skip non_space
+        while (base_next_cell_(&iter))
+        {
+            str s = get_char_utf8(&iter);
+            Assert(s.len);
+            result.x++;
+            // NOTE: IMCOMPLETE/WRONG
+            if (s.buffer[0] == ' ' || s.buffer[0] == '\t' || s.buffer[0] == '\n')
+            {
+                if (s.buffer[0] == '\n')
+                {
+                    result.x = 0;
+                    result.y++;
+                }
+                else
+                {
+                    result.x++;
+                }
+                break;
+            }
+        }
+        // skip space;
+        while (base_next_cell_(&iter))
+        {
+            str s = get_char_utf8(&iter);
+            Assert(s.len);
+            // NOTE: IMCOMPLETE/WRONG
+            if (!(s.buffer[0] == ' ' || s.buffer[0] == '\t' || s.buffer[0] == '\n'))
+            {
+                break;
+            }
+            if (s.buffer[0] == '\n')
+            {
+                result.x = 0;
+                result.y++;
+            }
+            else
+            {
+                result.x++;
+            }
+        }
+
+        count--;
+    }
+    return result;
+}
+
 
 #if 0
 static u32 get_line_len(base_iter *last_location, u32 line)

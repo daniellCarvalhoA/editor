@@ -37,6 +37,66 @@ const u8 utf8_len_table[] = {
 };
 
 
+static i32 utf8_prev_codepoint(u8 *buffer, u32 pos, utf8proc_int32_t *cp) {
+
+    if (pos == 0)
+    {
+        return -1;
+    }
+
+    size_t start = pos - 1;
+
+    // Walk back over continuation bytes.
+    while (start > 0 && (buffer[start] & 0xC0) == 0x80)
+    {
+        start--;
+    }
+
+    utf8proc_ssize_t len = utf8proc_iterate(buffer + start, pos - start, cp);
+
+    if (len < 0)
+    {
+        Assert(!"Handle invalid unicode!");
+    }
+
+    return start;
+}
+
+static str get_grapheme_backward(u8 *buffer, u32 cursor)
+{
+    u32 end = cursor;
+    u32 start = end;
+
+    utf8proc_int32_t next_cp;
+    utf8proc_int32_t cp;
+
+    int state = 0;
+    bool first = true;
+
+    while (start > 0) 
+    {
+        i32 prev = utf8_prev_codepoint(buffer, start, &cp);
+
+        if (prev < 0)
+        {
+            break;
+        }
+
+        if (!first) {
+            if (utf8proc_grapheme_break_stateful(cp, next_cp, &state))
+                break;
+        }
+
+        first = false;
+        next_cp = cp;
+        start = prev;
+    }
+
+    str result = { end - start, buffer + start };
+    return result;
+}
+
+
 // static i32 prev_codepoint(const u8 *s, size_t len, size_t pos, size_t *start)
 // {
 //     Assert(pos > 0);
@@ -396,6 +456,7 @@ typedef enum
     NewLine
 } row_result;
 
+#if 0
 static inline row_result base_next_row(base_iter *iter, u8 *row, u32 *row_size)
 {
     Assert(iter->type & LineNumber);
@@ -481,6 +542,7 @@ static inline row_result base_next_row(base_iter *iter, u8 *row, u32 *row_size)
     *row_size = size;
     return result;
 }
+#endif
 
 static inline void fix_iter(base_iter *iter) 
 {
@@ -824,7 +886,7 @@ static inline b32 base_next_cell_(base_iter *iter)
             iter->node_line += iter->node->lcnt;
             iter->node_pos  += iter->node->size;
             iter->piece_idx = iter->piece_line = iter->piece_pos = iter->pos_in_piece = iter->line_in_piece = 0;
-            iter->node       = iter->node->next;
+            iter->node      = iter->node->next;
         } 
         else if (iter->pos_in_piece >= iter->node->pieces[iter->piece_idx].size)
         {
@@ -847,6 +909,56 @@ static inline b32 base_next_cell_(base_iter *iter)
         return true;
     }
 }
+
+static inline b32 base_prev_cell(base_iter *iter)
+{
+    if (get_position(iter) == 0)
+    {
+        return false;
+    }
+    else
+    {
+        if (iter->piece_pos + iter->pos_in_piece == 0)
+        {
+            iter->node = iter->node->prev;
+            iter->abs_idx      -= iter->node->count;
+            iter->node_line    -= iter->node->lcnt;
+            iter->node_pos     -= iter->node->size;
+            iter->piece_idx     = iter->node->count - 1;
+            iter->piece_line    = iter->node->lcnt - iter->node->pieces[iter->piece_idx].lcnt;
+            iter->piece_pos     = iter->node->size - iter->node->pieces[iter->piece_idx].size;
+            iter->pos_in_piece  = iter->node->pieces[iter->piece_idx].size;
+        }
+
+        if (iter->pos_in_piece == 0)
+        {
+            iter->piece_idx--;
+            iter->abs_idx--;
+            iter->piece_line   -= iter->node->pieces[iter->piece_idx].lcnt;
+            iter->piece_pos    -= iter->node->pieces[iter->piece_idx].size;
+            iter->pos_in_piece  = iter->node->pieces[iter->piece_idx].size;
+        }
+
+        piece piece = iter->node->pieces[iter->piece_idx];
+
+        const buffer *buffer = get_buffer(iter->list, piece.type);
+        u32 piece_offset = buffer->lines[piece.off.row] + piece.off.col;
+        u8 *buf = buffer->text + piece_offset;
+
+        str cell = get_grapheme_backward(buf, iter->pos_in_piece);
+        Assert(iter->pos_in_piece >= cell.len);
+        iter->line_in_piece -= (buf[iter->pos_in_piece] == '\n');
+        iter->pos_in_piece -= cell.len;
+        return true;
+
+
+        // const u8
+    }
+
+    return true;
+}
+
+
 
 static inline b32 base_advance_by_cell(base_iter *iter, u32 count)
 {
@@ -918,7 +1030,6 @@ static inline b32 base_next_pos(base_iter *iter)
     return true;
 }
 
-
 static inline b32 base_advance_pos_rev_by(base_iter *iter, u32 count)
 {
     iter->type &= ~LineNumber;
@@ -955,12 +1066,8 @@ static inline b32 base_advance_pos_rev_by(base_iter *iter, u32 count)
     return true;
 }
 
-
-
-
 static inline b32 base_next_line_until(base_iter *iter, u32 end)
 {
-    // iter->typegcc
     if (get_line_number(iter) >=  end)
     {
         iter->type &= ~Position;
@@ -997,9 +1104,6 @@ static inline b32 base_next_line(base_iter *iter)
     u32 result = base_next_line_until(iter, iter->list->lcnt);
     return result;
 }
-
- 
-
 
 static inline u8 get_char(base_iter *iter) 
 {
@@ -1038,7 +1142,6 @@ static inline u8 get_char(base_iter *iter)
     return buffer->text[piece_offset + iter->pos_in_piece];
 }
 
-
 static inline str get_char_utf8(base_iter *iter)
 {
     str result = {};
@@ -1062,7 +1165,6 @@ static inline str get_char_utf8(base_iter *iter)
     result.len = utf8_len_table[result.buffer[0]];
     return result;
 }
-
 
 static inline b32 base_next_pred(
     base_iter *iter,

@@ -63,6 +63,7 @@ static editor_state *rand_editor(prng *prng)
     return e_state;
 }
 
+#if 0
 static undo_memory_header *rand_replace(piece_list *list, prng *prng)
 {
     undo_memory_header *header = 0;
@@ -125,6 +126,7 @@ static undo_memory_header *rand_replace(piece_list *list, prng *prng)
     free(pieces);
     return header;
 }
+#endif
 
 typedef struct 
 {
@@ -162,6 +164,7 @@ static void insert_mode_sequence(window *win, prng *prng, insert_seq_result *seq
     seq->max = win->bc;
     u32 seq_size = rand_range_u32_inclusive(prng, 1, MAX_INSERT_MODE_SEQ);
 
+    // state_result s_result = {};
     for (u32 i = 0; i < seq_size; ++i)
     {
         if (rand_b32(prng))
@@ -173,7 +176,7 @@ static void insert_mode_sequence(window *win, prng *prng, insert_seq_result *seq
             {
                 // char c = (char) text.buffer[j];
                 str s = { .buffer = (u8 *) text.buffer + j, .len = 1 };
-                insert_mode_insert(win, s);
+                insert_mode_insert(win, s); // , &s_result);
             }
         }
         else
@@ -203,6 +206,7 @@ static void insert_mode_sequence(window *win, prng *prng, insert_seq_result *seq
     seq->min = minimum(seq->min, seq->max);
 }
 
+#if 0
 static piece_list *rand_list(prng *prng)
 {
     piece_list *list = BootstrapPushStruct(piece_list, list_arena, 8 * 4096);
@@ -218,7 +222,7 @@ static piece_list *rand_list(prng *prng)
 
     return list;
 }
-
+#endif
 static void free_editor(editor_state *state)
 {
     // NOTE: make the editor struct own each buffers memory. 
@@ -233,6 +237,7 @@ static void free_editor(editor_state *state)
 }
 
 
+#if 0
 //EST(replace_sound)
 void replace_sound(prng *prng)
 {
@@ -240,6 +245,7 @@ void replace_sound(prng *prng)
     list_invariants(list);
     free_piece_list(list);
 }
+#endif
 
 TEST(replace_sound_2)
 void replace_sound_2(prng *prng)
@@ -315,7 +321,7 @@ void paste(prng *prng)
     // free(mid_buffer);
     // free_editor(editor);
 }
-
+#if 0
 //EST(replace_against_model)
 void replace_against_model(prng *p)
 {
@@ -336,6 +342,7 @@ void replace_against_model(prng *p)
     free_piece_list(list);
     free_arena(&m->arena);
 }
+#endif
 
 TEST(replace_against_model_2)
 void replace_against_model_2(prng *p)
@@ -380,6 +387,7 @@ void replace_against_model_2(prng *p)
 //     free_arena(&m->arena);
 // }
 
+#if 0
 //EST(undo)
 void undo(prng *prng)
 {
@@ -430,6 +438,7 @@ void undo(prng *prng)
     free_piece_list(list);
     free_screen(&screen);
 }
+#endif
 
 TEST(undo_2)
 void undo_2(prng *prng)
@@ -481,7 +490,8 @@ void undo_2(prng *prng)
     free_piece_list(list);
     free_screen(&screen);
 }
-//
+
+#if 0
 //EST(undo_redo)
 void undo_redo(prng *prng)
 {
@@ -533,6 +543,7 @@ void undo_redo(prng *prng)
     free_piece_list(list);
     free_screen(&screen);
 }
+#endif
 
 TEST(undo_redo_2)
 void undo_redo_2(prng *prng)
@@ -586,6 +597,7 @@ void undo_redo_2(prng *prng)
     free_screen(&screen);
 }
 //
+#if 0
 //ST(insert_mode_seq)
 void insert_mode_seq(prng *p)
 {
@@ -613,8 +625,8 @@ void insert_mode_seq(prng *p)
     {
         Assert(win_a->bc.y == 0);
 
-        move_by_motion(win_a, Down, cy, s, false);
-        move_by_motion(win_a, Right, cx, s, false);
+        move_by_motion(win_a, Down, cy, s, false, 0);
+        move_by_motion(win_a, Right, cx, s, false, 0);
 
         insert_mode_sequence(win_a, p, seq);
         commit_insert_mode_undo(list_a);
@@ -624,8 +636,8 @@ void insert_mode_seq(prng *p)
     window *win_b = create_window(&screen, LeafBuffer, 0);
     map_buffer_to_window(list_b, win_b);
     {
-        move_by_motion(win_b, Down, cy, s, false);
-        move_by_motion(win_b, Right, cx, s, false);
+        move_by_motion(win_b, Down, cy, s, false, 0);
+        move_by_motion(win_b, Right, cx, s, false, 0);
 
         if (seq->min.x != seq->max.x || seq->min.y != seq->max.y || seq->text_added.len > 0)
         {
@@ -654,6 +666,7 @@ void insert_mode_seq(prng *p)
     free_piece_list(list_a);
     free_piece_list(list_b);
 }
+#endif
 
 TEST(insert_mode_seq_2)
 void insert_mode_seq_2(prng *p)
@@ -678,12 +691,22 @@ void insert_mode_seq_2(prng *p)
 
     u32 cy = rand_range_u32_inclusive(p, 0, list_a->lcnt);
     u32 cx = rand_range_u32_inclusive(p, 0, MAX_LINE_LEN);
-    str s = {};
     {
         Assert(win_a->bc.y == 0);
 
-        move_by_motion(win_a, Down, cy, s, false);
-        move_by_motion(win_a, Right, cx, s, false);
+        motion_spec m_spec = {
+            .motion_type = Motion_Vertical,
+            .motion_quantifier = cy,
+            .flags = Backword,
+            .open_close_index = -1
+        };
+        move_by_motion(win_a, m_spec, false);
+
+        m_spec.motion_type = Motion_Horizontal;
+        m_spec.motion_quantifier = cx;
+        m_spec.flags = 0;
+
+        move_by_motion(win_a, m_spec, false);
 
         insert_mode_sequence(win_a, p, seq);
         commit_insert_mode_undo(list_a);
@@ -693,12 +716,22 @@ void insert_mode_seq_2(prng *p)
     window *win_b = create_window(&screen, LeafBuffer, 0);
     map_buffer_to_window(list_b, win_b);
     {
-        move_by_motion(win_b, Down, cy, s, false);
-        move_by_motion(win_b, Right, cx, s, false);
+        motion_spec m_spec = {
+            .motion_type = Motion_Vertical,
+            .motion_quantifier = cy,
+            .flags = Backword,
+            .open_close_index = -1
+        };
+        move_by_motion(win_b, m_spec, false);
+
+        m_spec.motion_type = Motion_Horizontal;
+        m_spec.motion_quantifier = cx;
+        m_spec.flags = 0;
+
+        move_by_motion(win_b, m_spec, false);
 
         if (seq->min.x != seq->max.x || seq->min.y != seq->max.y || seq->text_added.len > 0)
         {
-
             undo_node *node = allocate_tree_node(&list_b->history_arena);
             node->bc = win_b->bc;
 
@@ -715,7 +748,6 @@ void insert_mode_seq_2(prng *p)
                 replace_result rep = range_replace__(list_b, seq->min, seq->max, p_range);
                 node->data = rep.undo_header;
             }
-
             insert_node(&list_b->history, node);
         }
     }

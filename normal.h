@@ -38,9 +38,12 @@ typedef struct
 {
     action action;
     motion motion;
+    motion_flags s_flags;
     mode_modifier m_mod;
     position_modifier p_mod;
     u32 quantifier;
+
+    i32 open_close_index;
 
     u32 count;
     union
@@ -54,27 +57,41 @@ typedef struct
 
 typedef struct 
 {
-    state state;
-    state_result s_result;
-} normal_parse_state;
+    action action_type;
+    u32 action_quantifier;
+    position_modifier p_mod;
+    str inserted;
+    mode_modifier m_mod;
+} action_spec;
 
-
-static inline void reset_result(state_result *s_result)
+static inline void reset_action_spec(action_spec *spec)
 {
-    s_result->action       = NoAction;
-    s_result->motion       = NoMotion;
-    s_result->m_mod        = NoChange;
-    s_result->p_mod        = Next;
-    s_result->quantifier   = 0;
-    s_result->count        = 0;
-    s_result->inserted.len = 0;
-    s_result->inserted.buffer = NULL;
+    memset(spec, 0, sizeof(action_spec));
 }
+
+typedef struct 
+{
+    action_spec a_spec;
+    motion_spec m_spec;
+} command;
+
+typedef struct 
+{
+    state state;
+    command command;
+    // these are a temporary variable, it is not kept for the 'dot' command
+    u32 count;
+    u8 char_pending[4];
+
+} normal_parse_state;
 
 static inline void reset_parse_state(normal_parse_state *p_state)
 {
     p_state->state  = Start;
-    reset_result(&p_state->s_result);
+    reset_action_spec(&p_state->command.a_spec);
+    reset_motion_spec(&p_state->command.m_spec);
+
+    p_state->count = 0;
 }
 
 typedef enum 

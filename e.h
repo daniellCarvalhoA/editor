@@ -75,10 +75,40 @@ static const char *mode_str(mode edit_mode)
     return result;
 }
 
-// window *active_window      = NULL;
 window *interacting_window = NULL;
 
 static platform_api Platform;
+
+typedef struct
+{
+    u8 open;
+    u8 close;
+} char_pair;
+
+
+static char_pair open_close_pairs[] = 
+{
+    { '(', ')' },
+    { '"', '"' },
+    { '{', '}' },
+    { '[', ']' },
+    { '<', '>' },
+};
+
+static inline i32 get_pair(u8 token)
+{
+    i32 result = - 1;
+    for (u32 i = 0; i < ArrayCount(open_close_pairs); ++i)
+    {
+        char_pair test_pair = open_close_pairs[i];
+        if (test_pair.open == token || test_pair.close == token)
+        {
+            result = i;
+            break;
+        }
+    }
+    return result;
+}
 
 
 typedef struct editor_state
@@ -89,15 +119,10 @@ typedef struct editor_state
     paste_buffer p_buffer;
     mode edit_mode;
     normal_parse_state p_state;
-    state_result prev_command;
+    command prev_command;
 } editor_state;
 
 
 #include "insert_mode.h"
 
-// static piece_list *get_active_buffer()
-// {
-//     piece_list *result = active_window->buffer;
-//     return result;
-// }
 

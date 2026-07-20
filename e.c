@@ -39,9 +39,9 @@ static void render(editor_state *state)
 
     if (state->screen.change & Render_RedrawBorders)
     {
-        set_color(&state->screen, 32);
+        // set_color(&state->screen, 32);
         draw_borders(&state->screen, state->screen.root_window);
-        reset_color(&state->screen);
+        // reset_color(&state->screen);
     }
 
     state->screen.change = Render_NoChange;
@@ -50,6 +50,7 @@ static void render(editor_state *state)
 
     reset_window_cursor(&state->screen, state->edit_mode);
     window *active_window = state->screen.active_window;
+
     place_cursor(&state->screen, active_window->cy, active_window->cx);
 
     flush_buffer(&state->screen);

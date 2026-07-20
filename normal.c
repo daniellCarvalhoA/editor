@@ -5,14 +5,40 @@ static parse_result parse_normal(editor_state *editor, str token)
     parse_result result = Error;
 
     normal_parse_state *p_state = &editor->p_state;
-    state_result *s_result = &p_state->s_result;
-    window **active_window      = &editor->screen.active_window;
 
-    if (p_state->state == Middle && p_state->s_result.motion == Search)
+    action_spec *a_spec = &p_state->command.a_spec;
+    motion_spec *m_spec = &p_state->command.m_spec;
+    window **active_window = &editor->screen.active_window;
+
+
+    if (token.buffer[0] >= '1' && token.buffer[0] <= '9')
     {
-        s_result->count = token.len;
-        Assert(token.len < ArrayCount(s_result->match));
-        memcpy(&s_result->match, token.buffer, token.len);
+        a_spec->action_quantifier = a_spec->action_quantifier * 10 + (token.buffer[0] - '0');
+        m_spec->motion_quantifier = m_spec->motion_quantifier * 10 + (token.buffer[0] - '0');
+        p_state->state = Middle;
+        return NotDone;
+    }
+
+    if (p_state->state == Middle && m_spec->motion_type == Motion_NoMotion)
+    {
+        if  (m_spec->flags & Range)
+        {
+            i32 pair_index = get_pair(token.buffer[0]);
+
+            if (pair_index >= 0)
+            {
+                m_spec->open_close_index = pair_index;
+                m_spec->motion_type = Motion_Search;
+                return Ok;
+            }
+        }
+    }
+
+    if (p_state->state == Middle && m_spec->motion_type == Motion_Search)
+    {
+        m_spec->match_str_len = token.len;
+        Assert(token.len < ArrayCount(m_spec->match_str));
+        memcpy(&m_spec->match_str, token.buffer, token.len);
         if (is_visual(editor->edit_mode))
         {
             (*active_window)->change |= Render_VisualModeCursorChange;
@@ -20,18 +46,11 @@ static parse_result parse_normal(editor_state *editor, str token)
         return Ok;
     }
 
-    if (token.buffer[0] >= '1' && token.buffer[0] <= '9')
-    {
-        s_result->quantifier = s_result->quantifier * 10 + (token.buffer[0] - '0');
-        p_state->state = Middle;
-        return NotDone;
-    }
-
     switch (token.buffer[0])
     {
         case '.':
         {
-            *s_result = editor->prev_command;
+            p_state->command = editor->prev_command;
             result = Ok;
              
         } break;
@@ -50,7 +69,7 @@ static parse_result parse_normal(editor_state *editor, str token)
         {
             if (is_visual(editor->edit_mode))
             {
-                s_result->m_mod = NormalChange;
+                a_spec->m_mod = NormalChange;
                 (*active_window)->change |= Render_ModeChange;
                 editor->edit_mode = Normal;
             }
@@ -59,13 +78,12 @@ static parse_result parse_normal(editor_state *editor, str token)
         {
             if (editor->edit_mode != Visual)
             {
-                s_result->m_mod = VisualChange;
+                a_spec->m_mod = VisualChange;
                 (*active_window)->vc = (*active_window)->bc;
             }
             else
             {
-                // Assert(editor->edit_mode == Visual);
-                s_result->m_mod = NormalChange;
+                a_spec->m_mod = NormalChange;
 
             }
             (*active_window)->change |= Render_ModeChange;
@@ -77,13 +95,12 @@ static parse_result parse_normal(editor_state *editor, str token)
         {
             if (editor->edit_mode != LineVisual)
             {
-                s_result->m_mod = LineVisualChange;
+                a_spec->m_mod = LineVisualChange;
                 (*active_window)->vc = (*active_window)->bc;
             }
             else
             {
-                // Assert(editor->edit_mode == LineVisual);
-                s_result->m_mod = NormalChange;
+                a_spec->m_mod = NormalChange;
 
             }
             (*active_window)->change |= Render_ModeChange;
@@ -97,20 +114,28 @@ static parse_result parse_normal(editor_state *editor, str token)
                 p_state->state = Meta;
                 result = NotDone;
             }
-        } break;
+        } break ;
 
         case 'w':
         {
             if (p_state->state == Meta)
             {
                 (*active_window)->change |= Render_ModeChange;
-                s_result->m_mod = LayoutChange;
+                a_spec->m_mod = LayoutChange;
                 result = Ok;
             }
             else
             {
-
+                m_spec->motion_type = Motion_Word;
+                result = Ok;
             }
+        } break;
+
+        case 'b':
+        {
+            m_spec->motion_type = Motion_Word;
+            m_spec->flags |= Backword;
+            result = Ok;
         } break;
         case '0':
         {
@@ -118,16 +143,17 @@ static parse_result parse_normal(editor_state *editor, str token)
             {
                 case Start:
                 {
-                    s_result->motion = Zero;
+                    m_spec->motion_type = Zero;
                     result = Ok;
 
                 } break;
 
                 case Middle:
                 {
-                    if (s_result->action == NoAction)
+                    if (a_spec->action_type == NoAction)
                     {
-                        s_result->quantifier *= 10;
+                        a_spec->action_quantifier *= 10;
+                        m_spec->motion_quantifier *= 10;
                         result = NotDone;
                     }
                     else
@@ -148,17 +174,17 @@ static parse_result parse_normal(editor_state *editor, str token)
         {
             if (is_visual(editor->edit_mode))
             {
-                s_result->action = Yank;
+                a_spec->action_type = Yank;
                 result = Ok;
             }
-            else if (p_state->state == Middle && s_result->action == Yank)
+            else if (p_state->state == Middle && a_spec->action_type == Yank)
             {
-                s_result->motion = Down;
+                m_spec->motion_type = Motion_Vertical;
                 result = Ok;
             }
             else if (p_state->state == Start)
             {
-                s_result->action = Yank;
+                a_spec->action_type = Yank;
                 p_state->state = Middle;
                 result = NotDone;
             }
@@ -167,19 +193,19 @@ static parse_result parse_normal(editor_state *editor, str token)
 
         case 'd':
         {
-            if (is_visual(editor->edit_mode))
+           if (is_visual(editor->edit_mode))
             {
-                s_result->action = Delete;
+                a_spec->action_type = Delete;
                 result = Ok;
             }
-            else if (p_state->state == Middle && s_result->action == Delete)
+            else if (p_state->state == Middle && a_spec->action_type == Delete)
             {
-                s_result->motion = Down;
+                m_spec->motion_type = Motion_Vertical;
                 result = Ok;
             } 
             else if (p_state->state == Start)
             {
-                s_result->action = Delete;
+                a_spec->action_type = Delete;
                 p_state->state = Middle;
                 result = NotDone;
             } 
@@ -187,22 +213,20 @@ static parse_result parse_normal(editor_state *editor, str token)
 
         case 'c':
         {
+            a_spec->m_mod = InsertionChange;
             if (is_visual(editor->edit_mode))
             {
-                s_result->action = Delete;
-                s_result->m_mod = InsertionChange;
+                a_spec->action_type = Delete;
                 result = Ok;
             }
-            else if (p_state->state == Middle && s_result->action == Delete)
+            else if (p_state->state == Middle && a_spec->action_type == Delete)
             {
-                s_result->motion = Down;
-                s_result->m_mod = InsertionChange;
+                m_spec->motion_type = Motion_Vertical;
                 result = Ok;
             } 
             else if (p_state->state == Start)
             {
-                s_result->action = Delete;
-                s_result->m_mod = InsertionChange;
+                a_spec->action_type = Delete;
                 p_state->state = Middle;
                 result = NotDone;
             } 
@@ -216,8 +240,21 @@ static parse_result parse_normal(editor_state *editor, str token)
             if (p_state->state == Meta)
             {
                 (*active_window)->change |= Render_ModeChange;
-                s_result->m_mod = InsertionChange;
+                a_spec->m_mod = InsertionChange;
                 result = Ok;
+            }
+            else if (p_state->state == Middle && a_spec->action_type != NoAction)
+            {
+                m_spec->flags |= Range;
+                m_spec->flags |= Exclusive;
+                result = NotDone;
+            }
+            else if (p_state->state == Start && is_visual(editor->edit_mode))
+            {
+                m_spec->flags |= Range;
+                m_spec->flags |= Exclusive;
+                p_state->state = Middle;
+                result = NotDone;
             }
 
         } break;
@@ -225,14 +262,14 @@ static parse_result parse_normal(editor_state *editor, str token)
         case 'I':
         {
             (*active_window)->change |= Render_ModeChange;
-            s_result->m_mod = InsertionChange;
-            s_result->motion = Underscore;
+            a_spec->m_mod = InsertionChange;
+            m_spec->motion_type = Underscore;
             result = Ok;
         } break;
 
         case '_':
         {
-            s_result->motion = Underscore;
+            m_spec->motion_type = Underscore;
             result = Ok;
         } break;
 
@@ -240,7 +277,7 @@ static parse_result parse_normal(editor_state *editor, str token)
         {
             if (editor->edit_mode == Normal) 
             {
-                for (u32 i = 0; i < Maximum(1, s_result->quantifier); ++i)
+                for (u32 i = 0; i < Maximum(1, a_spec->action_quantifier); ++i)
                 {
                     undo_(*active_window);
                 }
@@ -253,7 +290,7 @@ static parse_result parse_normal(editor_state *editor, str token)
         {
             if (editor->edit_mode == Normal)
             {
-                for (u32 i = 0; i < Maximum(1, s_result->quantifier); ++i)
+                for (u32 i = 0; i < Maximum(1, a_spec->action_quantifier); ++i)
                 {
                     redo(*active_window);
                 }
@@ -264,7 +301,7 @@ static parse_result parse_normal(editor_state *editor, str token)
 
         case '$':
         {
-            s_result->motion = Dollar;
+            m_spec->motion_type = Dollar;
 
             result = Ok;
         } break;
@@ -272,99 +309,165 @@ static parse_result parse_normal(editor_state *editor, str token)
         case 'A':
         {
             (*active_window)->change |= Render_ModeChange;
-            s_result->m_mod = InsertionChange; 
-            s_result->motion = Dollar;
-            s_result->quantifier = 0;
+            a_spec->m_mod = InsertionChange; 
+            m_spec->motion_type = Dollar;
+            // s_result->quantifier = 0;
             result = Ok;
         } break;
 
         case 'a':
         {
             (*active_window)->change |= Render_ModeChange;
-            s_result->m_mod = InsertionChange; 
-            s_result->motion = Right;
-            s_result->quantifier = Maximum(1, p_state->s_result.quantifier);
+            a_spec->m_mod = InsertionChange; 
+            m_spec->motion_type = Motion_Horizontal;
             result = Ok;
         } break;
 
         case 'o':
         {
             (*active_window)->change |= Render_ModeChange;
-            s_result->m_mod = InsertionChange;
-            s_result->quantifier = 0;
-            s_result->motion = Dollar;
-            s_result->action = Insertion;
-            s_result->count = 1;
-            s_result->char_pending[0] = '\n';
+            a_spec->m_mod = InsertionChange;
+            m_spec->motion_type = Dollar;
+            a_spec->action_type = Insertion;
+            p_state->count = 1;
+            p_state->char_pending[0] = '\n';
             result = Ok;
         } break;
 
         case 'l':
         {
-            s_result->motion = Right;
+            m_spec->motion_type = Motion_Horizontal;
             result = Ok;
         } break;
 
         case 'h':
         {
-            s_result->motion = Left;
+            m_spec->motion_type = Motion_Horizontal;
+            m_spec->flags |= Backword;
             result = Ok;
         } break;
 
         case 'k':
         {
-            s_result->motion = Up;
-            result = Ok;
+            if (p_state->state == Meta)
+            {
+                m_spec->motion_type = Motion_Vertical;
+                m_spec->motion_quantifier = get_height(&editor->screen, *active_window) / 2;
+
+                result = Ok;
+            }
+            else
+            {
+                m_spec->motion_type = Motion_Vertical;
+                result = Ok;
+            }
         } break;
 
         case 'j':
         {
-            s_result->motion = Down;
-            result = Ok;
+            if (p_state->state == Meta)
+            {
+                m_spec->motion_type = Motion_Vertical;
+                m_spec->flags |= Backword;
+                m_spec->motion_quantifier = get_height(&editor->screen, *active_window) / 2;
+                result = Ok;
+            }
+            else
+            {
+                m_spec->motion_type = Motion_Vertical;
+                m_spec->flags |= Backword;
+                result = Ok;
+            }
         } break;
 
         case 'G':
         {
-            s_result->motion = Absolute;
-            if (!s_result->quantifier)
+            m_spec->motion_type = Absolute;
+            if (!m_spec->motion_quantifier)
             {
-                s_result->quantifier = UINT32_MAX;
+                m_spec->motion_quantifier = UINT32_MAX;
             }
             else
             {
-                s_result->quantifier--;
+                m_spec->motion_quantifier--;
             }
             result = Ok;
         } break;
 
         case 'P':
         {
-            s_result->p_mod = Current;
-            s_result->action = Paste;
+            a_spec->p_mod = Current;
+            a_spec->action_type = Paste;
             result = Ok;
         } break;
 
         case 'p':
         {
-            s_result->action = Paste;
+            a_spec->action_type = Paste;
             result = Ok;
 
         } break;
 
         case 'f':
         {
+            m_spec->motion_type = Motion_Search; 
             if (p_state->state == Start)
             {
-                s_result->motion = Search; 
                 p_state->state = Middle;
                 result = NotDone;
             }
-            else if (p_state->state == Middle && s_result->action != NoAction)
+            else if (p_state->state == Middle && a_spec->action_type != NoAction)
             {
-                s_result->motion = Search;
+                result = NotDone;
+            }
+        } break;
+
+        case 'F':
+        {
+            m_spec->motion_type = Motion_Search; 
+            m_spec->flags = Backword;
+            if (p_state->state == Start)
+            {
+                p_state->state = Middle;
+                result = NotDone;
+            }
+            else if (p_state->state == Middle && a_spec->action_type != NoAction)
+            {
                 result = NotDone;
             }
 
+        } break;
+
+
+        case 't':
+        {
+            m_spec->motion_type = Motion_Search;
+            m_spec->flags |= Exclusive;
+            if (p_state->state == Start)
+            {
+                p_state->state = Middle;
+                result = NotDone;
+            }
+            else if (p_state->state == Middle && a_spec->action_type != NoAction)
+            {
+                result = NotDone;
+            }
+        } break;
+
+        case 'T':
+        {
+            m_spec->motion_type = Motion_Search;
+            m_spec->flags |= Exclusive;
+            m_spec->flags |= Backword;
+            if (p_state->state == Start)
+            {
+                p_state->state = Middle;
+                result = NotDone;
+            }
+            else if (p_state->state == Middle && a_spec->action_type != NoAction)
+            {
+                result = NotDone;
+            }
         } break;
 
         default: 
@@ -375,9 +478,9 @@ static parse_result parse_normal(editor_state *editor, str token)
     return result;
 }
 
-static inline void change_mode(editor_state *state, state_result *s_result )
+static inline void change_mode(editor_state *state, action_spec *a_spec)
 {
-    switch (s_result->m_mod)
+    switch (a_spec->m_mod)
     {
         case NoChange:
         {
@@ -386,7 +489,7 @@ static inline void change_mode(editor_state *state, state_result *s_result )
         case InsertionChange:
         {
             state->edit_mode = Insert;
-            s_result->action = Insertion;
+            a_spec->action_type = Insertion;
         } break;
 
         case LayoutChange:
@@ -410,24 +513,14 @@ static inline void change_mode(editor_state *state, state_result *s_result )
     }
 }
 
-static void yank(
-    window *win,
-    paste_buffer *p_buffer,
-    mode edit_mode,
-    state_result *s_result)
+static void yank(window *win, paste_buffer *p_buffer, mode edit_mode, motion_spec m_spec)
 {
     if (p_buffer->buffer)
     {
         free_paste_buffer(p_buffer);
     }
 
-    str match_str = { .buffer = s_result->match, .len = s_result->count };
-    win_range w_range = get_cursor_range(
-        win,
-        s_result->motion,
-        s_result->quantifier,
-        edit_mode,
-        match_str);
+    win_range w_range = get_cursor_range(win, m_spec, edit_mode);
     win->dc = w_range.first;
 
     replace_result rep = yank_(win->buffer, w_range.first, w_range.one_past_end);
@@ -438,31 +531,16 @@ static void yank(
     p_buffer->end    = rep.end;
     p_buffer->flags  = rep.flags;
     p_buffer->count  = rep.count;
-    p_buffer->type   = paste_type_from_motion(s_result->motion, edit_mode);
+    p_buffer->type   = paste_type_from_motion(m_spec.motion_type, edit_mode);
 }
 
-static undo_node *change(
-    window *win,
-    paste_buffer *p_buffer,
-    win_range w_range,
-    str inserted)
+static undo_node *change(window *win, paste_buffer *p_buffer, win_range w_range, str inserted)
 {
     // Assert(p_buffer);
     if (p_buffer && p_buffer->buffer)
     {
         free_paste_buffer(p_buffer);
     }
-
-    // str match_str = { .buffer = s_result->match, .len = s_result->count };
-    // win_range w_range = get_cursor_range(
-    //     win,
-    //     s_result->motion,
-    //     edit_mode,
-    //     s_result->quantifier,
-    //     match_str);
-    //
-    //
-    // win->dc = w_range.first;
 
     undo_node *node = allocate_tree_node(&win->buffer->history_arena);
     node->bc = win->bc;
@@ -495,7 +573,7 @@ static undo_node *change(
         // be in grapheme clusters.
         // Its is also wrong becaus it assumes a one line insertion.
         win->dc.x += inserted.len;
-
+        win->bc.x = win->dc.x;
     }
 
     replace_result rep = range_replace__(
@@ -515,7 +593,6 @@ static undo_node *change(
         p_buffer->flags  = rep.flags;
         p_buffer->count  = 0;
     }
-    // p_buffer->type   = paste_type_from_motion(s_result->motion, edit_mode);
 
     win->buffer->changed = true;
     node->data = rep.undo_header;
@@ -524,130 +601,79 @@ static undo_node *change(
 
 static void edit(editor_state *state)
 {
-    // normal_parse_state *p_state = &state->p_state;
-    state_result *s_result = &state->p_state.s_result;
+    command *command = &state->p_state.command;
+    action_spec *a_spec = &command->a_spec;
+    motion_spec *m_spec = &command->m_spec;
+    // state_result *s_result = &state->p_state.s_result;
     window *win = state->screen.active_window;
 
-    switch (s_result->action)
+    switch (a_spec->action_type)
     {
         case NoAction:
         {
-            change_mode(state, s_result);
-            str match_str = { .buffer = s_result->match, .len = s_result->count };
-            move_by_motion(
-                win,
-                s_result->motion,
-                s_result->quantifier,
-                match_str,
-                state->edit_mode != Insert);
+            change_mode(state, a_spec);
+            move_by_motion(win, *m_spec, state->edit_mode != Insert);
 
-            if (s_result->m_mod == InsertionChange)
+            if (a_spec->m_mod == InsertionChange)
             {
-                s_result->inserted.buffer =
-                    win->buffer->append.text +
-                    win->buffer->append.text_len;
-                s_result->inserted.len = 0;
-                s_result->m_mod = NoChange;
+                a_spec->inserted.buffer = win->buffer->append.text + win->buffer->append.text_len;
+                a_spec->m_mod = NoChange;
             }
 
             if (is_visual(state->edit_mode))
             {
                 win->change |= Render_VisualModeCursorChange;
-
             }
         } break;
 
         case Insertion:
         {
-            str s = {};
-            move_by_motion(
-                win,
-                s_result->motion,
-                s_result->quantifier,
-                s,
-                false);
+            move_by_motion(win, command->m_spec, false);
 
-            if (s_result->inserted.len)
+            if (a_spec->inserted.len)
             {
                 win_range w_range = { win->bc, win->bc };
-
-                undo_node *node = change(win, NULL, w_range, s_result->inserted);
-
+                undo_node *node = change(win, NULL, w_range, a_spec->inserted);
                 insert_node(&win->buffer->history, node);
-
                 win->bc = w_range.first;
-
-                // s_result->m_mode = NoChange;
             }
             else
             {
-                Assert(s_result->char_pending);
+                Assert(state->p_state.char_pending);
 
                 str s = { 
-                    .buffer = s_result->char_pending,
-                    .len = s_result->count 
+                    .buffer = state->p_state.char_pending,
+                    .len = state->p_state.count 
                 };
-                insert_mode_insert(win, s);
+                insert_mode_insert(win, s); //, s_result);
                 win->buffer->changed = true;
             }
 
-            if (s_result->m_mod == InsertionChange)
-            {
-                s_result->inserted.buffer =
-                    win->buffer->append.text +
-                    win->buffer->append.text_len;
-                s_result->inserted.len = 0;
-            }
-            change_mode(state, s_result);
+            change_mode(state, a_spec);
 
         } break;
 
         case Delete:
         {
-            str match_str = { .buffer = s_result->match, .len = s_result->count };
+            win_range w_range = get_cursor_range(win, *m_spec, state->edit_mode);
 
-            win_range w_range = get_cursor_range(
-                win,
-                s_result->motion,
-                state->edit_mode,
-                s_result->quantifier,
-                match_str);
+            state->p_buffer.type = paste_type_from_motion(m_spec->motion_type, state->edit_mode);
 
-            state->p_buffer.type = paste_type_from_motion(
-                s_result->motion,
-                state->edit_mode);
+            undo_node *node = change(win, &state->p_buffer, w_range, a_spec->inserted);
 
-            undo_node *node = change(
-                win,
-                &state->p_buffer,
-                w_range,
-                s_result->inserted);
-
-            if (s_result->m_mod == InsertionChange)
+            if (a_spec->m_mod == InsertionChange)
             {
+                a_spec->inserted.buffer = win->buffer->append.text + win->buffer->append.text_len;
                 win->buffer->staged = node;
                 state->edit_mode = Insert;
-                s_result->inserted.buffer = 
-                    win->buffer->append.text + 
-                    win->buffer->append.text_len;
-                s_result->inserted.len = 0;
-                s_result->action = Replace;
-                s_result->m_mod  = NoChange;
+                a_spec->action_type = Replace;
+                a_spec->m_mod  = NoChange;
             }
             else
             {
                 insert_node(&win->buffer->history, node);
                 state->edit_mode = Normal;
             }
-
-            if (s_result->m_mod == InsertionChange)
-            {
-                s_result->inserted.buffer =
-                    win->buffer->append.text +
-                    win->buffer->append.text_len;
-                s_result->inserted.len = 0;
-            }
-
             win->bc = w_range.first;
 
         } break;
@@ -656,24 +682,11 @@ static void edit(editor_state *state)
         {
             Assert(state->edit_mode == Normal);
 
-            str match_str = { .buffer = s_result->match, .len = s_result->count };
+            state->p_buffer.type = paste_type_from_motion(m_spec->motion_type, state->edit_mode);
 
-            state->p_buffer.type = paste_type_from_motion(
-                s_result->motion,
-                state->edit_mode);
+            win_range w_range = get_cursor_range(win, *m_spec, state->edit_mode);
 
-            win_range w_range = get_cursor_range(
-                win,
-                s_result->motion,
-                state->edit_mode,
-                s_result->quantifier,
-                match_str);
-
-            undo_node *node = change(
-                win,
-                &state->p_buffer,
-                w_range,
-                s_result->inserted);
+            undo_node *node = change(win, &state->p_buffer, w_range, a_spec->inserted);
 
             insert_node(&win->buffer->history, node);
 
@@ -704,10 +717,7 @@ static void edit(editor_state *state)
                 // that I will keep editing that buffer. 
                 if (state->p_buffer.buffer != win->buffer)
                 {
-                    piece = serialize_piece_range_to(
-                        state->p_buffer.buffer,
-                        win->buffer,
-                        p_range);
+                    piece = serialize_piece_range_to(state->p_buffer.buffer, win->buffer, p_range);
 
                     p_range.pieces = &piece;
                     p_range.count  = 1;
@@ -718,67 +728,73 @@ static void edit(editor_state *state)
 
                 win_range range;
 
-                if (is_visual(state->edit_mode))
+                switch (state->edit_mode)
                 {
-                    range = get_visual_range(win);
-                }
-                else
-                {
-                    buffer_cursor bc = win->bc;
-
-                    if (state->p_buffer.type == Line)
+                    case Visual:
                     {
-                        bc.x = 0;
-                        win->dc.x = 0;
-                        if (s_result->p_mod == Next)
+                        range = get_visual_range(win);
+                    } break;
+
+                    case LineVisual:
+                    {
+                        range = get_line_visual_range(win);
+                    } break;
+
+                    default:
+                    {
+                        buffer_cursor bc = win->bc;
+
+                        if (state->p_buffer.type == Line)
                         {
-                            bc.y++;
-                            win->dc.y++;
+                            bc.x = 0;
+                            win->dc.x = 0;
+                            if (a_spec->p_mod == Next)
+                            {
+                                bc.y++;
+                                win->dc.y++;
+                            }
                         }
-                    }
-                    else if (s_result->p_mod == Next)
-                    {
-                        bc.x++;
-                    }
+                        else if (a_spec->p_mod == Next)
+                        {
+                            bc.x++;
+                        }
 
-                    range.first = range.one_past_end = bc;
+                        range.first = range.one_past_end = bc;
+                    } break;
                 }
 
-                replace_result rep = range_replace__(
-                    win->buffer,
-                    range.first,
-                    range.one_past_end,
-                    p_range);
+                replace_result rep = range_replace__(win->buffer, range.first, range.one_past_end, p_range);
 
                 node->data = rep.undo_header;
 
-                if (s_result->quantifier > 1)
+                if (a_spec->action_quantifier > 1)
                 {
-                    u32 num_repeat = s_result->quantifier - 1;
+                    u32 num_repeat = a_spec->action_quantifier - 1;
                     // Try to compress this if possible:
                     // a lot of replaces into a single big replace.
                     while (num_repeat > 0)
                     {
-                        replace_result rep = range_replace__(
-                            win->buffer,
-                            win->dc,
-                            win->dc,
-                            p_range);
+                        replace_result rep = range_replace__(win->buffer, win->dc, win->dc, p_range);
                         LIST_INSERT(node->data->next, rep.undo_header);
                         num_repeat--;
                     }
                 }
                 insert_node(&win->buffer->history, node);
                 state->edit_mode = Normal;
+
+                win->bc = range.first;
             }
 
         } break;
 
         case Yank:
         {
-            yank(win, &state->p_buffer, state->edit_mode, s_result);
-            state->edit_mode = Normal;
-            win->change |= Render_VisualModeCursorChange;
+            yank(win, &state->p_buffer, state->edit_mode, *m_spec);
+            if (is_visual(state->edit_mode))
+            {
+                state->edit_mode = Normal;
+                win->change |= Render_VisualModeCursorChange;
+            }
         } break;
 
         default:
@@ -789,19 +805,15 @@ static void edit(editor_state *state)
 
 static void process_normal(editor_state *state, str s)
 {
-    if (s.len > 1)
-    {
-        return;
-    }
     switch (parse_normal(state, s))
     {
         case Ok:
         {
             edit(state);
-            if (state->p_state.s_result.action != NoAction || 
-                state->p_state.s_result.m_mod == InsertionChange)
+            if (state->p_state.command.a_spec.action_type != NoAction || 
+                state->p_state.command.a_spec.m_mod == InsertionChange)
             {
-                state->prev_command = state->p_state.s_result;
+                state->prev_command = state->p_state.command;
             }
             reset_parse_state(&state->p_state);
         }  break;

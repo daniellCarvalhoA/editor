@@ -1,7 +1,7 @@
 
 static inline motion rand_motion(prng *prng)
 {
-    motion result = (motion) rand_range_u32_inclusive(prng, NoMotion, MotionCount);
+    motion result = (motion) rand_range_u32_inclusive(prng, Motion_NoMotion, MotionCount);
     return result;
 }
 

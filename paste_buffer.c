@@ -10,7 +10,10 @@ static inline void free_paste_buffer(paste_buffer *buffer)
     if (buffer->count)
     {
         Assert(buffer->pieces);
-        free_memory_block(history, (void *) buffer->pieces, buffer->count * sizeof(piece));
+        free_memory_block(
+            history,
+            (void *) buffer->pieces,
+            buffer->count * sizeof(piece));
     }
     else
     {
@@ -49,7 +52,6 @@ static inline u32 get_count(paste_buffer *buffer)
     return count;
 }
 
-
 static inline void reset_paste_buffer(paste_buffer *buffer)
 {
     memset(buffer, 0, sizeof(paste_buffer));
@@ -60,12 +62,15 @@ static inline paste_type paste_type_from_motion(motion motion, mode edit_mode)
     paste_type result = Cursor;
     switch (motion)
     {
-        case NoMotion:
+        case Motion_NoMotion:
         {
-            // Assert(edit_mode == Visual);
+            if (edit_mode == LineVisual)
+            {
+                result = Line;
+            }
         } break;;
-        case Up:
-        case Down: 
+        case Motion_Vertical:
+        // case Down: 
         case Absolute:
         {
             result = Line;

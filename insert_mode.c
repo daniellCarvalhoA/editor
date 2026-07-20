@@ -37,6 +37,11 @@ static void commit_insert_mode_undo(piece_list *list)
             insert_node(&list->history, new_node);
         }
     }
+    else if (list->staged)
+    {
+        insert_node(&list->history, list->staged);
+        list->staged = 0;
+    }
     clear_insert_state(&list->i_state);
     clear(&state->insert_mode_arena);
 }
@@ -44,11 +49,18 @@ static void commit_insert_mode_undo(piece_list *list)
 static void normal_mode(window *win)
 {
     commit_insert_mode_undo(win->buffer);
-    str s = {};
-    move_by_motion(win, Left, 1, s, true);
+
+    motion_spec m_spec = {
+        .motion_type = Motion_Horizontal,
+        .motion_quantifier = 1,
+        .flags = Backword,
+        .open_close_index = -1,
+    };
+
+    move_by_motion(win, m_spec, true);
 }
 
-static void insert_mode_insert(window *win, str s) // u8 *input, u32 input_size)
+static void insert_mode_insert(window *win, str s) //, state_result *s_result) 
 {
     piece_list *list   = win->buffer;
     u32 lines_inserted = count_lines(s);
@@ -61,7 +73,7 @@ static void insert_mode_insert(window *win, str s) // u8 *input, u32 input_size)
     {
         case Init:
         {
-            // list->num_pieces++;
+            // s_result->inserted.buffer = list->append.text + list->append.text_len;
             state->state     = Inserted;
             state->position  = position(&location);
             state->abs_idx   = location.abs_idx;
@@ -84,7 +96,8 @@ static void insert_mode_insert(window *win, str s) // u8 *input, u32 input_size)
                     state->ins_count += 2;
                     state->del_count = 1;
 
-                    list_piece *lp = PushStruct(&state->insert_mode_arena, list_piece, NoClear());
+                    list_piece *lp = PushStruct(
+                        &state->insert_mode_arena, list_piece, NoClear());
 
                     lp->piece = *curr_piece;
                     INIT_LIST_HEAD(&lp->list);
@@ -458,21 +471,21 @@ static b32 process_insert(editor_state *state, str s)
         {
             normal_mode(win);
             state->edit_mode = Normal;
-            state->prev_command.inserted.len = 
+            state->prev_command.a_spec.inserted.len = 
                 (win->buffer->append.text + win->buffer->append.text_len) - 
-                (state->prev_command.inserted.buffer);
+                (state->prev_command.a_spec.inserted.buffer);
             win->change |= Render_ModeChange;
         } break;
 
         case '\r':
         {
-            str new = { .buffer = (u8 *) "\n", .len = sizeof("\n") };
-            insert_mode_insert(win, new);
+            str new = { .buffer = (u8 *) "\n", .len = sizeof("\n") - 1};
+            insert_mode_insert(win, new); // , &state->prev_command);
         } break;
 
         default:
         {
-            insert_mode_insert(win, s);
+            insert_mode_insert(win, s); //, &state->prev_command);
         } break;
 
     }

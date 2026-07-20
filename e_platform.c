@@ -388,7 +388,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    while (1)
+    while (true)
     {
         poll_num = poll(fds, nfds, -1);
         if (poll_num == -1)

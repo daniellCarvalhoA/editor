@@ -214,21 +214,22 @@ static inline void model_move_by_motion(model *model, motion motion, u32 quant)
 {
     switch (motion)
     {
-        case Up:
+        case Motion_Vertical:
         {
             u32 cy = (quant > model->cy) ? 0 : (model->cy - quant);
+            // if (
             model_move_to_cursor(model, cy, model->cx);
         } break;
 
-        case Down:
-        {
-            u32 count_lines = num_lines(model);
-            u32 max_lines = (count_lines) ? (count_lines - 1) : 0;
-            u32 cy = Minimum(quant + model->cy, max_lines);
-            model_move_to_cursor(model, cy, model->cx);
-        } break;
+        //case Down:
+        //{
+            //u32 count_lines = num_lines(model);
+            //u32 max_lines = (count_lines) ? (count_lines - 1) : 0;
+            //u32 cy = Minimum(quant + model->cy, max_lines);
+            //model_move_to_cursor(model, cy, model->cx);
+        //} break;
 
-        case Right:
+        case Motion_Horizontal:
         {
             u32 cx = Minimum(
                 model->cx + quant,
@@ -236,11 +237,11 @@ static inline void model_move_by_motion(model *model, motion motion, u32 quant)
             model_move_to_pos(model, model->pos - model->cx + cx);
         } break;
 
-        case Left:
-        {
-            u32 x = (quant > model->cx) ? model->cx : quant;
-            model_move_to_pos(model, model->pos - x);
-        } break;
+        //case Left:
+        //{
+            //u32 x = (quant > model->cx) ? model->cx : quant;
+            //model_move_to_pos(model, model->pos - x);
+        //} break;
 
         default:
         {

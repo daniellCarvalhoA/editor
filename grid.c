@@ -117,8 +117,8 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
                         active_window,
                         s_cursor); 
 
-                    if (is_in_range(range, w_cursor, edit_mode) && 
-                        compare(w_cursor, active_window->bc) != EqualTo)
+                    if (is_in_range(range, w_cursor, edit_mode)) // && 
+                        // compare(w_cursor, active_window->bc) != EqualTo)
                     {
                         memset(at, Reversed, tab_length);
                     }
@@ -149,8 +149,8 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
                         s_cursor); 
 
 
-                    if (is_in_range(range, w_cursor, edit_mode) && 
-                        compare(w_cursor, active_window->bc) != EqualTo)
+                    if (is_in_range(range, w_cursor, edit_mode)) //&& 
+                        // compare(w_cursor, active_window->bc) != EqualTo)
                     {
                         *at = Reversed;
                     }
