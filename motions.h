@@ -64,7 +64,6 @@ typedef struct
     u32 motion_quantifier;
     u32 match_str_len;
     u8 match_str[4];
-    //str match_str;
     //
     motion_flags flags;
     i32 open_close_index;
