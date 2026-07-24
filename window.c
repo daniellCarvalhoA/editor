@@ -1,15 +1,3 @@
-// TODOS:
-//
-// 1> Test scrolling invariants: 
-//  For instance > up down isomorphism: 
-//    If one scrolls x times up and then x times down, the state of the window and the grid should be 
-//    semantically the same (perhaps even structurally);
-// 2> Draw window boundaries; v
-// 3> clean window API.
-// 4> optimize window rendering.
-//      4.1> Maybe use simd when calculating the diff between the old state of the screen and the new state.
-//      4.2> Buffer terminal output.
-// 
 
 static window *create_window(screen *screen, layout layout, win_flags flags)
 {
@@ -34,14 +22,11 @@ static window *create_window(screen *screen, layout layout, win_flags flags)
     return win;
 }
 
-// Returns true if by closing this window, we are quitting the editor.
-
 
 static inline void set_window_vertical_dim(window *win, u16 y, u16 height)
 {
     Assert(!win->parent || win->parent->layout == Vertical);
     win->offset = y;
-    // win->full_dim = win->dyn_dim = height;
     win->full_dim = height;
 }
 
@@ -49,7 +34,6 @@ static inline void set_window_horizontal_dim(window *win, u16 x, u16 width)
 {
     Assert(!win->parent || win->parent->layout == Horizontal);
     win->offset = x;
-    // win->full_dim = win->dyn_dim = width;
     win->full_dim = width;
 }
 
@@ -72,28 +56,9 @@ static void set_window_params(window *win, screen *screen, layout layout)
         u16 win_width  = get_width(screen, win);
         u16 screen_y   = get_screen_y(screen, win);
         u16 screen_x   = get_screen_x(screen, win);
-        // TODO: realloc 
         win->view = default_grid_view(&screen->grid, screen_y, screen_x, win_height, win_width);
-        // u32 line_start = screen_y * screen->cols;
-        // for (u32 i = 0; i < win_height; ++i)
-        // {
-        //     win->view.grid_lines[i] = line_start + (i * screen->cols) + screen_x;
-        // }
     }
 }
-
-// static void free_v(window *root)
-// {
-//     if (root)
-//     {
-//         free_view(&root->view);
-//         window *child;
-//         list_for_each_entry(child, &root->first_child, sibling)
-//         {
-//             free_v(child);
-//         }
-//     }
-// }
 
 static window *create_first_window(screen *screen, layout layout) 
 {
@@ -153,8 +118,7 @@ static u32 window_intersection_vertical(screen *screen, window *root, u32 x, win
 }
 
 // Calculates the set of windows which intesect a a given Horizontal line.
-static u32 window_intersection_horizontal(
-    screen *screen, window *root, u32 y, window **result, u32 result_len)
+static u32 window_intersection_horizontal(screen *screen, window *root, u32 y, window **result, u32 result_len)
 {
     window *win = root;
     u32 total = 0;
@@ -580,22 +544,16 @@ static void draw_borders(screen *screen, window *win)
                          else if (is_in_up)
                          {
                              s =  "┴";
-                             // u32 s_len = sizeof(s) - 1;
-                             // write_string(screen,  (u8 *) "┴", sizeof("┴") - 1);
                              up_index++;
                          } 
                          else if (is_in_down)
                          {
                              s =  "┬";
-                             // u32 s_len = sizeof(s) - 1;
-                             // write_string(screen,  (u8 *) "┬", sizeof("┬") - 1);
                              down_index++;
                          }
                          else
                          {
                              s =  "─";
-                             // u32 s_len = sizeof(s) - 1;
-                             // write_string(screen,  (u8 *) "─", sizeof("─") - 1);
                          }
 
                          u32 s_len = strlen(s);
@@ -685,24 +643,20 @@ static void draw_borders(screen *screen, window *win)
                              left_index++;
                              right_index++;
                              s =  "┼";
-                             // write_string(screen,  (u8 *) "┼", sizeof("┼") - 1);
                          }
                          else if (is_in_left)
                          {
                              s = "┤";
-                             // write_string(screen,  (u8 *) "┤", sizeof("┤") - 1);
                              left_index++;
                          } 
                          else if (is_in_right)
                          {
                              s =  "├";
-                             // write_string(screen,  (u8 *) "├", sizeof("├") - 1);
                              right_index++;
                          }
                          else
                          {
                              s =  "│";
-                             // write_string(screen,  (u8 *) "│", sizeof("│") - 1);
                          }
 
                          u32 s_len = strlen(s);
@@ -732,81 +686,6 @@ static void draw_borders(screen *screen, window *win)
     }
 }
 
-// static void clean_borders(screen *screen, window *root)
-// {
-//     window *win = root;
-//
-//     u16 w_screen_y = get_screen_y(screen, win);
-//     u16 w_screen_x = get_screen_x(screen, win);
-//     u16 w_height   = get_height(screen, win);
-//     u16 w_width    = get_width(screen, win);
-//
-//     switch (win->layout)
-//     {
-//          case Vertical:
-//          {
-//              window *child;
-//              list_for_each_entry(child, &win->first_child, sibling)
-//              {
-//                  u16 c_screen_y = get_screen_y(screen, child);
-//                  u16 c_height   = get_height(screen, child);
-//
-//                  if (c_screen_y + c_height < w_screen_y + w_height)
-//
-//                  {
-//                      u32 row = c_screen_y + c_height;
-//                      u8 *grid_start = screen->grid.text_8 + row * screen->grid.cols + w_screen_x;
-//                      u32 num_spaces = w_width;
-//                      if (w_screen_x + w_width < screen->cols)
-//                      {
-//                          num_spaces++;
-//                      }
-//                      memset(grid_start, ' ', num_spaces);
-//
-//                      u8 space[w_width];
-//                      memset(space, ' ', w_width);
-//                      place_cursor(screen, row, w_screen_x);
-//                      write_string(screen, space, w_width);
-//
-//                      u8 *attr_start = screen->grid.attr + row * screen->grid.cols + w_screen_x;
-//                      memset(attr_start, Default, w_width);
-//                  }
-//                  clean_borders(screen, child);
-//              }
-//          } break;
-//
-//          case Horizontal:
-//          {
-//             window *child;
-//             list_for_each_entry(child, &win->first_child, sibling)
-//             {
-//                 u16 c_screen_x = get_screen_x(screen, child);
-//                 u16 c_width    = get_width(screen, child);
-//
-//                 if (c_screen_x + c_width < w_screen_x + w_width)
-//                 {
-//                     u32 col = c_screen_x + c_width;
-//                     u8 *grid_start = screen->grid.text_8 + w_screen_y * screen->grid.cols + col;
-//                     u8 *attr_start = screen->grid.attr   + w_screen_y * screen->grid.cols + col;
-//
-//                     for (u32 j = 0; j < w_height; ++j)
-//                     {
-//                         place_cursor(screen, j + w_screen_y, col);
-//                         write_string(screen, (u8 *) " ", 1);
-//                         grid_start[screen->grid.cols * j] = ' ';
-//                         attr_start[screen->grid.cols * j] = Default;
-//                     }
-//                 }
-//                 clean_borders(screen, child);
-//             }
-//          } break;
-//
-//          default:
-//          {
-//          } break;
-//     }
-// }
-
 static void update_layout(screen *screen, window *root)
 {
     u32 num_separators = root->num_children - (root->num_fixed + 1);
@@ -814,7 +693,6 @@ static void update_layout(screen *screen, window *root)
     {
         case Vertical:
         {
-            // u16 total_height      = get_dyn_height(screen, root) - num_separators;
             u16 total_height      = get_dyn_height(screen, root) - num_separators;
             u16 height_per_window = total_height / (root->num_children - root->num_fixed);
             u16 rem               = total_height % (root->num_children - root->num_fixed);;
@@ -844,8 +722,6 @@ static void update_layout(screen *screen, window *root)
                 if (win->buffer)
                 {
                     win->change |= Render_BufferChange;
-                    // win->buffer->changed = true;
-                    // win->buffer->top_changed = win->top_line;
                 }
 
                 set_window_params(win, screen, win->layout);
@@ -884,8 +760,6 @@ static void update_layout(screen *screen, window *root)
                 if (win->buffer)
                 {
                     win->change |= Render_BufferChange;
-                    // win->buffer->changed = true;
-                    // win->buffer->top_changed = win->top_line;
                 }
 
                 set_window_params(win, screen, win->layout);
@@ -920,7 +794,6 @@ static void close_active_window(screen *screen)
         list_del(&(*active_window)->sibling);
         list_del(&(*active_window)->next_in_buffer);
         list_add(&(*active_window)->sibling, &screen->first_free_window);
-        // list_move(&(*active_window)->sibling, &screen->first_free_window);
         *active_window = list_entry(new_active_window_list, window, sibling);
 
         parent->num_children--;
@@ -1109,19 +982,15 @@ static void attach_window(screen *screen, window *new, window *old, layout layou
         new->parent = old->parent = parent;
 
         screen->root_window = parent;
-        // *root = parent;
-
         switch (layout)
         {
             case Vertical:
             {
-                // parent->full_dim = parent->dyn_dim = get_height(screen, parent);
                 parent->full_dim = get_height(screen, parent);
             } break;
 
             case Horizontal:
             {
-                // parent->full_dim = parent->dyn_dim = get_width(screen, parent);
                 parent->full_dim = get_width(screen, parent);
             } break;
 
@@ -1133,7 +1002,6 @@ static void attach_window(screen *screen, window *new, window *old, layout layou
     else
     {
         Assert(parent->layout != LeafCommand && parent->layout != LeafBuffer);
-        // clean_borders(screen, screen->root_window);
 
         if (parent->layout == layout)
         {
@@ -1180,9 +1048,7 @@ static void attach_window(screen *screen, window *new, window *old, layout layou
     if (new->flags & WinFlags_Fixed)
     {
         Assert(fixed_dim < parent->full_dim - (parent->fixed_dim + parent->num_children));
-        // new->full_dim    = new->dyn_dim = fixed_dim;
         new->full_dim    = fixed_dim;
-        // parent->dyn_dim -= (new->full_dim + 1);
         parent->fixed_dim = (new->full_dim + 1);
         parent->num_fixed++;
     }
@@ -1197,28 +1063,6 @@ static inline void map_buffer_to_window(piece_list *buffer, window *window)
     window->buffer = buffer;
     buffer->num_windows++;
 }
-
-// static inline void commit_cursor(window *win, mode edit_mode )
-// {
-//     win->bc = win->dc;
-//
-//     if (win->layout != LeafCommand)
-//     {
-//         u32 curr_line_len = get_line_len_(&win->buffer->iter, win->bc.y);
-//
-//         if (win->bc.x >= curr_line_len)
-//         {
-//             win->bc.x = curr_line_len;
-//         }
-//
-//         if (curr_line_len && (curr_line_len == win->bc.x) && edit_mode == Normal)
-//         {
-//             win->bc.x--;
-//         }
-//
-//         win->bc.y = Minimum(win->bc.y, win->buffer->lcnt);
-//     }
-// }
 
 static inline void reset_window_cursor(screen *screen, mode edit_mode)
 {

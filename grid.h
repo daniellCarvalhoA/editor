@@ -131,13 +131,6 @@ static inline buffer_index buffer_index_from_cell(cell cell)
 //         one for the text just above the screen, and another for the text below.
 //         This would make 
 
-typedef struct line
-{
-    u16 start;
-    u16 num_rows;
-    u16 len_bytes;
-    u16 len_grapheme;
-} line;
 
 typedef enum
 {

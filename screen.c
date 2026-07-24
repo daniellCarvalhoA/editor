@@ -9,13 +9,13 @@ static void flush_buffer(screen *screen)
     ssize_t ret = write(1, screen->buffer, screen->cursor);
     if (ret < 0)
     {
-        fprintf(stderr, "Error writint to terminal\n");
-        exit(0);
+        fprintf(stderr, "Error writing to terminal\n");
+        abort();
     }
     if (ret < screen->cursor)
     {
         fprintf(stderr, "Wrote less than expected\n");
-        exit(0);
+        abort();
     }
     screen->cursor = 0;
 }
@@ -47,8 +47,6 @@ static void set_color(screen *screen, u32 color)
     Assert(len > 0);
     if ((size_t) len >= max_size)
     {
-        // fprintf(stderr, "set color\n");
-        // exit(3);
         flush_buffer(screen);
         set_color(screen, color);
         return;
@@ -68,8 +66,6 @@ static void place_cursor(screen *screen, u32 y, u32 x)
     Assert(len > 0);
     if ((size_t) len >= max_size)
     {
-        // fprintf(stderr, "place_cursor\n");
-        // exit(4);
         flush_buffer(screen);
         place_cursor(screen, y, x);
         return;
@@ -88,8 +84,6 @@ static void move_cursor_right(screen *screen, u32 x)
     Assert(len > 0);
     if ((size_t) len >= max_size)
     {
-        // fprintf(stderr, "move_cursor\n");
-        // exit(5);
         flush_buffer(screen);
         move_cursor_right(screen, x);
         return;
@@ -109,8 +103,6 @@ static void set_cursor_column(screen *screen, u32 x)
     Assert(len > 0);
     if ((size_t) len >= max_size)
     {
-        // fprintf(stderr, "set_cursor_column\n");
-        // exit(6);
         flush_buffer(screen);
         set_cursor_column(screen, x);
         return;
@@ -119,7 +111,6 @@ static void set_cursor_column(screen *screen, u32 x)
 
     screen->cursor += (u32) len;
 }
-
 
 static void append_to_buffer(screen *screen, u8 *s, u32 len)
 {
@@ -131,8 +122,7 @@ static void append_to_buffer(screen *screen, u8 *s, u32 len)
     screen->cursor += len;
 }
 
-
-
+#if 0
 static void rotate(u32 left, u16 *mid, u32 right)
 {
     if ((left == 0) || (right == 0))
@@ -164,8 +154,7 @@ static void rotate(u32 left, u16 *mid, u32 right)
         Assert(false);
     }
 }
-
-// static inline  
+#endif
 
 static inline void update_window_size(screen *screen)
 {
@@ -178,10 +167,6 @@ static inline void update_window_size(screen *screen)
 
     update_layout(screen, screen->root_window);
     screen->change |= Render_RedrawBorders;
-    // set_color(screen, 32);
-    // draw_borders(screen, screen->root_window);
-    // reset_color(screen);
-    // draw_borders(screen, screen->root_window);
 }
 
 
@@ -206,14 +191,6 @@ static inline void reset_window_size(screen *screen)
     screen->cols = win.ws_col;
 }
 
-// static inline void reset_screen_diff_bounds(screen *screen)
-// {
-//     screen->left = UINT16_MAX;
-//     screen->top = UINT16_MAX;
-//     screen->right = 0; 
-//     screen->bot = 0;
-// }
-
 static inline void initialize_screen(screen *screen)
 {
     initialize_arena_with_size(&screen->render_arena, 8 * 4096);
@@ -226,19 +203,14 @@ static inline void initialize_screen(screen *screen)
     platform_window_dim dim = Platform.GetTerminalDim(handle);
     screen->rows = dim.height;
     screen->cols = dim.width;
-// #else
 #endif
-    // reset_window_size(screen);
 
     initialize_multilevel_grid(&screen->grid, screen->rows, screen->cols);
-    // reset_screen_diff_bounds(screen);
     INIT_LIST_HEAD(&screen->first_free_window);
 
     screen->root_window    = create_first_window(screen, LeafBuffer);
     screen->active_window = screen->root_window;
     screen->command_window = create_window(screen, LeafCommand, WinFlags_Fixed);
-
-    // attach_window(screen, 
 
     attach_window(screen, screen->command_window, screen->root_window, Vertical, 1);
     screen->command_window->c_buffer = allocate_command_buffer(screen->cols);
@@ -253,9 +225,7 @@ static void free_screen(screen *screen)
         free_multilevel_grid(&screen->grid);
     }
     free_command_buffer(&screen->command_window->c_buffer);
-    // free_v(screen->root_window);
     free_arena(&screen->render_arena);
-
 }
 
 

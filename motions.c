@@ -129,8 +129,7 @@ static void move_by_motion(window *win, motion_spec m_spec, b32 exclusive)
              }
              else
              {
-                 win->dc.x = win->bc.x = clamp_to_length(win->buffer, win->bc.y, win->bc.x + quantifier,
-                     exclusive);
+                 win->dc.x = win->bc.x = clamp_to_length(win->buffer, win->bc.y, win->bc.x + quantifier, exclusive);
              }
          } break;
  
@@ -221,11 +220,11 @@ static void move_by_motion(window *win, motion_spec m_spec, b32 exclusive)
 static win_range get_motion_range(window *win, motion_spec m_spec)
 {
     win_range result = {};
-    u32 quantifier = Maximum(1, m_spec.motion_quantifier);
     switch (m_spec.motion_type)
     {
         case Motion_Vertical:
         {
+            u32 quantifier = m_spec.motion_quantifier + 1;
             result.first.x = 0;
             result.one_past_end.x = 0;
             if (m_spec.flags & Backword)
@@ -235,14 +234,21 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
             }
             else
             {
-                result.first.y = saturating_sub(win->bc.y, quantifier);
+                result.first.y = saturating_sub(win->bc.y, quantifier - 1);
                 result.one_past_end.y = win->bc.y + 1;
+            }
+
+            if (m_spec.flags & Exclusive)
+            {
+                result.one_past_end.y--;
+                result.one_past_end.x = clamp_to_length(win->buffer, win->bc.y, UINT32_MAX, false);
             }
 
         } break;
 
         case Motion_Horizontal:
         {
+            u32 quantifier = Maximum(1, m_spec.motion_quantifier);
             result.first.y = result.one_past_end.y = win->bc.y;
             if (m_spec.flags & Backword)
             {
@@ -273,13 +279,15 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
 
         case Dollar:
         {
+            u32 quantifier = m_spec.motion_quantifier;
             result.first = win->bc;
-            result.one_past_end.y = win->bc.y;
+            result.one_past_end.y = win->bc.y + saturating_sub(quantifier, 1);
             result.one_past_end.x = clamp_to_length(win->buffer, win->bc.y, UINT32_MAX, false);
         } break;
 
         case Zero:
         {
+            // u32 quantifier = m_spec.motion_quantifier;
             result.first.y = win->bc.y;
             result.first.x = 0;
             result.one_past_end = win->bc;
@@ -287,6 +295,7 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
 
         case Motion_Search:
         {
+            u32 quantifier = m_spec.motion_quantifier;
             if (m_spec.flags & Range)
             {
                 Assert(m_spec.open_close_index >= 0 && 
@@ -299,6 +308,9 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
                 if (m_spec.flags & Exclusive)
                 {
                     result.first.x++;
+                    if (result.one_past_end.x == 0)
+                    {
+                    }
                 }
                 else
                 {
@@ -322,14 +334,16 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
 
         case Underscore:
         {
+            u32 quantifier = m_spec.motion_quantifier;
             result.one_past_end = win->bc;
-            result.first.y = win->bc.y;
+            result.first.y = saturating_sub(win->bc.y, quantifier);
             result.first.x = skip_space(&win->buffer->iter, win->bc.y);
 
         } break;
 
         case Motion_Word:
         {
+            u32 quantifier = m_spec.motion_quantifier;
             if (m_spec.flags & Backword)
             {
                 result.first = find_word_back(&win->buffer->iter, quantifier, win->bc);
@@ -378,7 +392,7 @@ static inline win_range get_line_visual_range(window *win)
     if (win->bc.y <= win->vc.y)
     {
         result.first.y = win->bc.y;
-        result.one_past_end.y = win->bc.y + 1;
+        result.one_past_end.y = win->vc.y + 1;
     }
     else
     {

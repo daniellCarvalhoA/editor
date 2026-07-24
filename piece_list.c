@@ -18,13 +18,6 @@ typedef struct
     u32 count;
 } piece_slice;
 
-// TODO: There is a lot of addition and subtraction of pairs (size, lcnt).
-// => cast make this fields adjacent in all the structs they appear in and,
-// then cast the pair to a u64 and add as u64.
-// Theoretically a file could be bigger than 4Gb (Who the fuck edits 4Gb files).
-// Anyway if a file is bigger than 4gb we may need to partition it into chunks,
-// and the buffer type will no longer be an enum. Instead it will be an ordinal.
-
 static b32 lists_are_equal(const piece_list *a, const piece_list *b)
 {
     b32 result = (a->size == b->size) && (a->lcnt == b->lcnt);
@@ -185,22 +178,7 @@ static piece make_piece_from_char(piece_list *list, char c)
     return result;
 }
 
-#if 0
-static void move_to_line(piece_list *list, u32 line)
-{
-    list->iter.type &= ~Position;
-    u32 current_line = get_line_number(&list->iter);
-
-    if (line < current_line)
-    {
-        base_advance_rev_by_line(&list->iter, line - current_line);
-    } else if (line > current_line)
-    {
-        base_advance_by_line(&list->iter, current_line - line);
-    }
-
-    normalize(&list->iter);
-}
+// #if 0
 static base_iter find_position(base_iter *last_location, u32 position)  
 {
     base_iter iter = *last_location;
@@ -221,7 +199,39 @@ static base_iter find_position(base_iter *last_location, u32 position)
 
     return iter;
 }
-#endif
+
+static buffer_cursor cursor_from_position(base_iter *last_location, u32 position)
+{
+    buffer_cursor result = {};
+    base_iter iter = find_position(last_location, position);
+    result.y = line_number(&iter);
+
+    // for (;;)
+    // {
+    //     if (base_prev_cell(&iter))
+    //     {
+    //         if (result.y == line_number(&iter))
+    //         {
+    //             result.x++;
+    //         }
+    //     }
+    //     // if (result.y == line_number)
+    // }
+
+    while (base_prev_cell(&iter) && result.y == line_number(&iter))
+    {
+        // if (result.y > line_number(&iter))
+        // {
+        //     result.x--;
+        //     break;
+        // }
+        result.x++;
+    }
+    return result;
+}
+
+
+// #endif
 
 static base_iter find_line(base_iter *last_location, u32 line)
 {
@@ -270,20 +280,6 @@ static u32 skip_space(base_iter *last_location, u32 cy)
     return result;
 }
 
-// static u32 find_char(
-//     base_iter *last_location,
-//     str match,
-//     buffer_cursor cursor)
-// {
-//     u32 result = cursor.x; 
-//     base_iter iter = find_cursor(last_location, cursor);
-//     while (base_next_pred(&iter, not_equal_to, match)) 
-//     {
-//         result++;
-//     }
-//     return result;
-// }
-
 static u32 get_line_len_(base_iter *last_location, u32 line)
 {
     base_iter iter = find_line(last_location, line);
@@ -328,8 +324,6 @@ static u32 find_char_back(base_iter *last_location, str match, u32 count, buffer
 
 static buffer_range find_boundary(base_iter *last_location, u8 open, u8 close, buffer_cursor cursor)
 {
-    // buffer_range br = { cursor, cursor };
-
     base_iter copy_iter = find_cursor(last_location, cursor);
     base_iter iter = copy_iter;
 
@@ -396,13 +390,16 @@ static buffer_range find_boundary(base_iter *last_location, u8 open, u8 close, b
         if (s.buffer[0] == close)
         {
             forward_score++;
-            if (!found_second_best && second_best_score == -1)
+            if (found_second_best)
             {
-                found_second_best = true;
-                second_best_last = forward;
-                if (back_score < 1)
+                second_best_score++;
+                if (second_best_score == 0)
                 {
-                    break;
+                    second_best_last = forward;
+                    if (back_score < 1)
+                    {
+                        break;
+                    }
                 }
             }
             forward.x++;
@@ -412,9 +409,10 @@ static buffer_range find_boundary(base_iter *last_location, u8 open, u8 close, b
             forward_score--;
             if (!found_second_best)
             {
+                found_second_best = true;
                 second_best_first = forward;
-                second_best_score--;
             }
+            second_best_score--;
             forward.x++;
         }
         else if ((s.len == 1) && memcmp(s.buffer, "\n", 1) == 0)
@@ -436,7 +434,7 @@ static buffer_range find_boundary(base_iter *last_location, u8 open, u8 close, b
         result.one_past_end = forward;
         result.one_past_end.x--;
     }
-    else if (found_second_best)
+    else if (found_second_best && second_best_score == 0)
     {
         result.first = second_best_first;
         result.one_past_end = second_best_last;
@@ -445,8 +443,6 @@ static buffer_range find_boundary(base_iter *last_location, u8 open, u8 close, b
 
     return result;
 }
-
-
 
 static u32 find_char(base_iter *last_location, str match, u32 count, buffer_cursor cursor)
 {
@@ -486,9 +482,7 @@ static buffer_cursor find_word_back(base_iter *last_location, u32 count, buffer_
 
     for (; count > 0; )
     {
-        // skip non_space
-
-        // skip space;
+        // skip non_space;
         while (base_prev_cell(&iter))
         {
             str s = get_char_utf8(&iter);
@@ -506,6 +500,7 @@ static buffer_cursor find_word_back(base_iter *last_location, u32 count, buffer_
             }
             result.x--;
         }
+        // skip space
         while (base_prev_cell(&iter))
         {
             str s = get_char_utf8(&iter);
@@ -585,39 +580,6 @@ static buffer_cursor find_word(base_iter *last_location, u32 count, buffer_curso
     return result;
 }
 
-
-#if 0
-static u32 get_line_len(base_iter *last_location, u32 line)
-{
-    base_iter line_start = find_line(last_location, line);
-    if (line == last_location->list->lcnt)
-    {
-        return last_location->list->size - get_position(&line_start);
-    }
-    else
-    {
-        base_iter line_end = find_line(last_location, line + 1);
-        return get_position(&line_end) - get_position(&line_start) - 1;
-    }
-}
-
-static void move_to(piece_list *list, u32 position)
-{
-    list->iter.type &= ~LineNumber;
-    u32 last_position = get_position(&list->iter);
-
-    if (position < last_position)
-    {
-        base_advance_pos_rev_by(&list->iter, last_position - position);
-    }
-    else if (position > last_position)
-    {
-        base_advance_pos_by(&list->iter, position - last_position);
-    }
-    
-    normalize(&list->iter);
-}
-#endif
 
 static void maybe_merge_with_next(piece_list *list, segmented_node *node)
 {
@@ -759,12 +721,6 @@ static cursor make_space_for_at(piece_list *list, cursor at, u32 count)
             u32 right_to_new_count   = Minimum(pieces_per_this_node, right_remaining);
             u32 right_start          = pieces_per_this_node - right_to_new_count;
             u32 right_end            = right_len - right_count;
-
-                // u32 pieces_per_this_node = (rem > 0) ? pieces_per_node + 1 : pieces_per_node;
-                // u32 right_remaining = (right_count > right_len) ? 0 : right_len - right_count;
-                // u32 right_to_new_count = Minimum(pieces_per_this_node, right_remaining);
-                // u32 right_start = pieces_per_this_node - right_to_new_count;
-                // u32 right_end   = right_len - right_count;
 
             piece *dst_pieces = new_node->pieces + right_start;
             piece *src_pieces = right_pieces + right_end - right_to_new_count;
@@ -1607,130 +1563,6 @@ static cursor make_space(piece_list *list, cursor start, cursor end, u32 size)
     return result;
 }
 
-// static cursor make_space_for_at_(piece_list *list, cursor at, u32 count)
-// {
-//     cursor result;
-//
-//     if (at.node == &list->root_sentinel)
-//     {
-//         Assert(at.piece_index == 0);
-//         Assert(count > 0);
-//
-//         segmented_node *new_node = allocate_node(list);
-//
-//         DLIST_INSERT_TAIL(&list->root_sentinel, new_node);
-//         at.node = new_node;
-//         at.piece_index = 0;
-//     }
-//
-//     u32 const total     = count + at.node->count;
-//     u32 const num_alloc = (total == 0) ? 0 : (total - 1) / MAX_PIECES_PER_NODE;
-//
-//     segmented_node *node = at.node;
-//     u32 start = at.piece_index;
-//
-//     if (total <= MAX_PIECES_PER_NODE)
-//     {
-//         Assert(num_alloc == 0);
-//         piece *pieces = node->pieces;
-//
-//         u32 num = node->count - start;
-//         node->count += count;
-//
-//         memmove(pieces + start + count, pieces + start, sizeof(piece) * num);
-//         result = at;
-//     }
-//     else
-//     {
-//         u32 num_nodes       = 1 + num_alloc;
-//         u32 pieces_per_node = total / num_nodes;
-//         u32 rem             = total % num_nodes;
-//
-//         u32 left_len = start;
-//
-//         piece *left_pieces = node->pieces;
-//
-//         u32 right_len = node->count - at.piece_index;
-//
-//         piece *right_pieces = node->pieces  + at.piece_index;
-//
-//         u32 left_count   = 0; // pieces copied so far from left part of split to newly allocated nodes
-//         u32 right_count  = 0; // pieces copied so far from right part of split to newly allocated nodes
-//         u32 pieces_count = 0; // pieces copied so far from *pieces* to newly allocated nodes
-//
-//         Assert(num_alloc > 0);
-//         for (u32 i = 0; i < num_alloc; ++i)
-//         {
-//             segmented_node *new_node = allocate_node(list);
-//             // Copy pieces from the right part of the split to the newly allocated node
-//             u32 pieces_per_this_node = (rem > 0) ? pieces_per_node + 1 : pieces_per_node;
-//             u32 right_remaining      = (right_count > right_len) ? 0 : right_len - right_count;
-//             u32 right_to_new_count   = Minimum(pieces_per_this_node, right_remaining);
-//             u32 right_start          = pieces_per_this_node - right_to_new_count;
-//             u32 right_end            = right_len - right_count;
-//
-//             piece *dst_pieces = new_node->pieces + right_start;
-//             piece *src_pieces = right_pieces + right_end - right_to_new_count;
-//
-//             memcpy(dst_pieces, src_pieces, sizeof(piece) * right_to_new_count);
-//
-//             for (u32 j = 0; j < right_to_new_count; ++j) 
-//             {
-//                 piece piece = src_pieces[j];
-//                 new_node->size += piece.size;
-//                 new_node->lcnt += piece.lcnt;
-//                 node->size     -= piece.size;
-//                 node->lcnt     -= piece.lcnt;
-//             }
-//
-//             right_count += right_to_new_count;
-//
-//             u32 pieces_end          = count - pieces_count;
-//             u32 pieces_to_new_count = Minimum(pieces_end, right_start);
-//             u32 pieces_start        = right_start - pieces_to_new_count;
-//
-//             pieces_count += pieces_to_new_count;
-//
-//             u32 from_left = left_len - pieces_start;
-//             dst_pieces = new_node->pieces;
-//             src_pieces = left_pieces + from_left;
-//
-//             memcpy(dst_pieces, src_pieces, sizeof(piece) * pieces_start);
-//
-//             for (u32 j = 0; j < pieces_start; ++j) 
-//             {
-//                 piece piece = src_pieces[j];
-//                 new_node->size += piece.size;
-//                 new_node->lcnt += piece.lcnt;
-//                 node->size     -= piece.size;
-//                 node->lcnt     -= piece.lcnt;
-//             }
-//             left_count += pieces_start;
-//             new_node->count = pieces_per_this_node;
-//             rem = (rem > 0) ? (rem - 1) : 0;
-//             DLIST_INSERT_AFTER(node, new_node);
-//         }
-//         u32 pieces_remaining = count - pieces_count;
-//
-//         piece *src_pieces = node->pieces + at.piece_index;
-//         piece *dst_pieces = node->pieces + at.piece_index + pieces_remaining;
-//
-//         u32 count = (node->count - right_count) - at.piece_index;
-//
-//         memmove(dst_pieces, src_pieces, sizeof(piece) * count);
-//         
-//         node->count = pieces_per_node;
-//
-//         if (at.piece_index >= node->count)
-//         {
-//             at.piece_index = at.piece_index % node->count;
-//             at.node = at.node->next;
-//         }
-//         result = at;
-//     }
-//     return result;
-// }
-
 static void redo(window *win)
 {
     piece_list *list = win->buffer;
@@ -1764,9 +1596,6 @@ static void redo(window *win)
             copy_range(start_cursor, end_cursor, header->ins_count, &slice_cursor);
 
             piece *pieces = get_pieces_from_header(header);
-
-            // list->num_pieces += header->del_count;
-            // list->num_pieces -= slice_cursor.count;
 
             for (u32 i = 0; i < slice_cursor.count; ++i)
             {
@@ -1853,21 +1682,6 @@ static void undo_(window *win)
     }
 }
 
-#if 0
-static inline u32 num_deleted_pieces(base_iter start, base_iter end)
-{
-    Assert(position(&start) <= position(&end));
-    u32 result = 0;
-
-    if (position(&start) != position(&end))
-    {
-        u32 end_idx   = end.abs_idx + (end.pos_in_piece != 0);
-        u32 start_idx = start.abs_idx + (start.pos_in_piece != get_piece_(&start)->size);
-        result = end_idx - start_idx;
-    }
-    return result;
-}
-#endif
 static void insert_many(cursor at, piece_slice *slices, u32 num_slices)
 {
     for (u32 i = 0; i < num_slices; ++i)
@@ -1891,8 +1705,6 @@ static void insert_many(cursor at, piece_slice *slices, u32 num_slices)
                 piece piece = src_pieces[j];
                 at.node->size += piece.size;
                 at.node->lcnt += piece.lcnt;
-                // list->size += piece.size;
-                // list->lcnt += piece.lcnt;
             }
 
             if (at.node->count == at.piece_index + copy_amount)
@@ -1909,95 +1721,90 @@ static void insert_many(cursor at, piece_slice *slices, u32 num_slices)
     }
 }
 
-static void replace_range_(
-    piece_list *list,
-    base_iter start,
-    base_iter end,
-    piece *pieces,
-    u32 num_pieces,
-    slice_cursor s_cursor)
-{
-    cursor start_cursor = { start.node, start.piece_idx };
-    cursor end_cursor   = { end.node, end.piece_idx };
-    cursor cursor = end_cursor;
-    u32 copy_amount = end.abs_idx - start.abs_idx;
+// static void replace_range_(
+//     piece_list *list,
+//     base_iter start,
+//     base_iter end,
+//     piece *pieces,
+//     u32 num_pieces,
+//     slice_cursor s_cursor)
+// {
+//     cursor start_cursor = { start.node, start.piece_idx };
+//     cursor end_cursor   = { end.node, end.piece_idx };
+//     cursor cursor = end_cursor;
+//     u32 copy_amount = end.abs_idx - start.abs_idx;
+//
+//     if (end.pos_in_piece > 0)
+//     {
+//         add_to_cursor_(&cursor, 1);
+//         copy_amount++;
+//
+//     }
+//     copy_range(start_cursor, cursor, copy_amount, &s_cursor);
+//
+//     piece_slice p_slice[2] = { { .base = pieces, .count = num_pieces } };
+//     u32 slice_count = 1;
+//
+//     piece *start_piece  = get_piece_(&start);
+//     if (start.abs_idx == end.abs_idx && start.pos_in_piece > 0) 
+//     {
+//         offset offset = get_offset(&end);
+//
+//         piece right = { 
+//             .size = start_piece->size - end.pos_in_piece,
+//             .lcnt = start_piece->lcnt - end.line_in_piece,
+//             .off  = offset,
+//             .type = start_piece->type,
+//         };
+//
+//         start_cursor.node->size -= start_piece->size - start.pos_in_piece;
+//         start_cursor.node->lcnt -= start_piece->lcnt - start.line_in_piece;
+//
+//         start_piece->size = start.pos_in_piece;
+//         start_piece->lcnt = start.line_in_piece;
+//
+//         add_to_cursor(list, &start_cursor, 1);
+//
+//         start_cursor = make_space_for_at(list, start_cursor, num_pieces + 1);
+//
+//         p_slice[1].base  = &right;
+//         p_slice[1].count = 1;
+//         slice_count++;
+//     }
+//     else
+//     {
+//         if (start.pos_in_piece > 0)
+//         {
+//             start_cursor.node->size -= start_piece->size - start.pos_in_piece;
+//             start_cursor.node->lcnt -= start_piece->lcnt - start.line_in_piece;
+//             start_piece->size = start.pos_in_piece;
+//             start_piece->lcnt = start.line_in_piece;
+//             add_to_cursor_(&start_cursor, 1);
+//             start.abs_idx++;
+//         }
+//
+//         if (end.pos_in_piece > 0)
+//         {
+//             piece *end_piece = get_piece_(&end);
+//             end_cursor.node->size -= end.pos_in_piece;
+//             end_cursor.node->lcnt -= end.line_in_piece;
+//             end_piece->off = get_offset(&end);
+//             end_piece->size -= end.pos_in_piece;
+//             end_piece->lcnt -= end.line_in_piece;
+//         }
+//
+//         u32 count = end.abs_idx - start.abs_idx;
+//
+//         if (count + num_pieces > 0)
+//         {
+//             start_cursor = make_space(list, start_cursor, end_cursor, num_pieces);
+//         }
+//     }
+//     insert_many(start_cursor, p_slice, slice_count);
+//     reset_cursor_(&list->iter);
+// }
 
-    if (end.pos_in_piece > 0)
-    {
-        add_to_cursor_(&cursor, 1);
-        copy_amount++;
-
-    }
-    copy_range(start_cursor, cursor, copy_amount, &s_cursor);
-
-    piece_slice p_slice[2] = { { .base = pieces, .count = num_pieces } };
-    u32 slice_count = 1;
-
-    piece *start_piece  = get_piece_(&start);
-    if (start.abs_idx == end.abs_idx && start.pos_in_piece > 0) 
-    {
-        // copy_slice(&s_cursor, start_piece, 1);
-
-        offset offset = get_offset(&end);
-
-        piece right = { 
-            .size = start_piece->size - end.pos_in_piece,
-            .lcnt = start_piece->lcnt - end.line_in_piece,
-            .off  = offset,
-            .type = start_piece->type,
-        };
-
-        start_cursor.node->size -= start_piece->size - start.pos_in_piece;
-        start_cursor.node->lcnt -= start_piece->lcnt - start.line_in_piece;
-
-        start_piece->size = start.pos_in_piece;
-        start_piece->lcnt = start.line_in_piece;
-
-        add_to_cursor(list, &start_cursor, 1);
-
-        start_cursor = make_space_for_at(list, start_cursor, num_pieces + 1);
-
-        p_slice[1].base  = &right;
-        p_slice[1].count = 1;
-        slice_count++;
-    }
-    else
-    {
-        if (start.pos_in_piece > 0)
-        {
-            start_cursor.node->size -= start_piece->size - start.pos_in_piece;
-            start_cursor.node->lcnt -= start_piece->lcnt - start.line_in_piece;
-            start_piece->size = start.pos_in_piece;
-            start_piece->lcnt = start.line_in_piece;
-            add_to_cursor_(&start_cursor, 1);
-            start.abs_idx++;
-        }
-
-        if (end.pos_in_piece > 0)
-        {
-            piece *end_piece = get_piece_(&end);
-            end_cursor.node->size -= end.pos_in_piece;
-            end_cursor.node->lcnt -= end.line_in_piece;
-            end_piece->off = get_offset(&end);
-            end_piece->size -= end.pos_in_piece;
-            end_piece->lcnt -= end.line_in_piece;
-        }
-
-        u32 count = end.abs_idx - start.abs_idx;
-
-        if (count + num_pieces > 0)
-        {
-            start_cursor = make_space(list, start_cursor, end_cursor, num_pieces);
-        }
-    }
-    insert_many(start_cursor, p_slice, slice_count);
-    reset_cursor_(&list->iter);
-}
-
-static piece serialize_piece_range_to(
-    piece_list *a,
-    piece_list *b,
-    piece_range p_range_a)
+static piece serialize_piece_range_to(piece_list *a, piece_list *b, piece_range p_range_a)
 {
     piece result = {};
     result.type = BufferType_Append;
@@ -2048,10 +1855,7 @@ static piece serialize_piece_range_to(
     return result;
 }
 
-static replace_result  yank_(
-    piece_list *list, 
-    buffer_cursor c0,
-    buffer_cursor c1)
+static replace_result  yank_(piece_list *list, buffer_cursor c0, buffer_cursor c1)
 {
     replace_result result = {};
     base_iter start = find_cursor(&list->iter, c0);
@@ -2114,7 +1918,7 @@ static replace_result  yank_(
     return result;
 }
 
-static edit_flags replace_range__(
+static edit_flags replace_range(
     piece_list *list,
     base_iter start,
     base_iter end,
@@ -2165,7 +1969,6 @@ static edit_flags replace_range__(
     {
         if (p_range.flags & Edit_Left)
         {
-            // Assert(0);
             left_piece = *(p_range.pieces);
             const buffer *buffer = get_buffer(list, left_piece.type);
             offset off = search_piece(buffer, left_piece, p_range.start);
@@ -2190,7 +1993,6 @@ static edit_flags replace_range__(
             offset off = search_piece(buffer, right_piece, p_range.end);
             right_piece.size = p_range.end;
             right_piece.lcnt = off.row - right_piece.off.row;
-            // right_piece.off  = off;
 
             piece_count--;
             p_slice[slice_count + (piece_count > 0)].base = &right_piece;
@@ -2216,7 +2018,6 @@ static edit_flags replace_range__(
     {
         offset offset = get_offset(&end);
 
-        
         right.size = start_piece->size - end.pos_in_piece;
         right.lcnt = start_piece->lcnt - end.line_in_piece;
         right.off  = offset;
@@ -2277,25 +2078,13 @@ static edit_flags replace_range__(
 }
 
 
-// static void yank(piece_list *list, buffer_cursor c0, buffer_cursor c1)
-// {
-//     replace_result result = {};
-//     base_iter start = find_cursor(&list->iter, c0);
-//     fix_iter(&start);
-//     base_iter end   = find_cursor(&list->iter, c1);
-//     fix_iter(&end);
-//
-//     result.start = start.pos_in_piece;
-//     result.end   = end.pos_in_piece;
-//
-// }
-
-static replace_result range_replace__(
+static replace_result range_replace(
     piece_list *list,
     buffer_cursor c0,
     buffer_cursor c1,
     piece_range p_range)
 {
+    list->changed_since_last_search = true;
     list->changed = true;
     replace_result result = {};
     base_iter start = find_cursor(&list->iter, c0);
@@ -2310,7 +2099,6 @@ static replace_result range_replace__(
     u32 not_boundary_end   = end.pos_in_piece > 0;
 
     u32 num_undo_pieces = (end.abs_idx + not_boundary_end) - start.abs_idx;
-    // u32 num_copied_pieces = num_undo_pieces;
 
     for (u32 i = 0; i < p_range.count; ++i)
     {
@@ -2325,10 +2113,7 @@ static replace_result range_replace__(
     list->size -= num_chars_deleted;
     list->lcnt -= num_lines_deleted;
 
-    undo_memory_header *header = allocate_undo_memory_block(
-        &list->history,
-        &list->history_arena,
-        num_undo_pieces);
+    undo_memory_header *header = allocate_undo_memory_block(&list->history, &list->history_arena, num_undo_pieces);
 
     header->abs_idx   = start.abs_idx;
     header->ins_count = p_range.count + not_boundary_start + not_boundary_end;
@@ -2338,217 +2123,207 @@ static replace_result range_replace__(
     slice_cursor slice_cursor = {};
     get_slice_cursor_from_header(&slice_cursor, header);
 
-    // piece_slice slice = { .base = pieces, .count = num_pieces };
-
-    result.flags = replace_range__(list, start, end, p_range, slice_cursor);
+    result.flags = replace_range(list, start, end, p_range, slice_cursor);
     result.undo_header = header;
     return result;
 }
 
-static replace_result range_replace_(
-    piece_list *list,
-    buffer_cursor c0,
-    buffer_cursor c1,
-    piece *pieces,
-    u32 num_pieces)
-{
-    replace_result result = {};
-    base_iter start = find_cursor(&list->iter, c0);
-    fix_iter(&start);
-    base_iter end   = find_cursor(&list->iter, c1);
-    fix_iter(&end);
+// static replace_result range_replace_(
+//     piece_list *list,
+//     buffer_cursor c0,
+//     buffer_cursor c1,
+//     piece *pieces,
+//     u32 num_pieces)
+// {
+//     replace_result result = {};
+//     base_iter start = find_cursor(&list->iter, c0);
+//     fix_iter(&start);
+//     base_iter end   = find_cursor(&list->iter, c1);
+//     fix_iter(&end);
+//
+//     result.start = start.pos_in_piece;
+//     result.end   = end.pos_in_piece;
+//
+//     u32 not_boundary_start = start.pos_in_piece > 0;
+//     u32 not_boundary_end   = end.pos_in_piece > 0;
+//
+//     u32 num_undo_pieces = (end.abs_idx + not_boundary_end) - start.abs_idx;
+//
+//     for (u32 i = 0; i < num_pieces; ++i)
+//     {
+//         piece piece = pieces[i];
+//         list->size += piece.size;
+//         list->lcnt += piece.lcnt;
+//     }
+//
+//     u32 num_lines_deleted = line_number(&end) - line_number(&start);
+//     u32 num_chars_deleted = position(&end)    - position(&start);
+//
+//     list->size -= num_chars_deleted;
+//     list->lcnt -= num_lines_deleted;
+//
+//     undo_memory_header *header = allocate_undo_memory_block(
+//         &list->history,
+//         &list->history_arena,
+//         num_undo_pieces);
+//
+//     header->abs_idx   = start.abs_idx;
+//     header->ins_count = num_pieces + not_boundary_start + not_boundary_end;
+//     header->del_count = num_undo_pieces;
+//     header->ref_count = 1;
+//
+//     slice_cursor slice_cursor = {};
+//     get_slice_cursor_from_header(&slice_cursor, header);
+//
+//     replace_range_(list, start, end, pieces, num_pieces, slice_cursor);
+//     result.undo_header = header;
+//     return result;
+// }
 
-    result.start = start.pos_in_piece;
-    result.end   = end.pos_in_piece;
-
-    u32 not_boundary_start = start.pos_in_piece > 0;
-    u32 not_boundary_end   = end.pos_in_piece > 0;
-
-    u32 num_undo_pieces = (end.abs_idx + not_boundary_end) - start.abs_idx;
-    // u32 num_copied_pieces = num_undo_pieces;
-
-    for (u32 i = 0; i < num_pieces; ++i)
-    {
-        piece piece = pieces[i];
-        list->size += piece.size;
-        list->lcnt += piece.lcnt;
-    }
-
-    u32 num_lines_deleted = line_number(&end) - line_number(&start);
-    u32 num_chars_deleted = position(&end)    - position(&start);
-
-    list->size -= num_chars_deleted;
-    list->lcnt -= num_lines_deleted;
-
-    undo_memory_header *header = allocate_undo_memory_block(
-        &list->history,
-        &list->history_arena,
-        num_undo_pieces);
-
-    header->abs_idx   = start.abs_idx;
-    header->ins_count = num_pieces + not_boundary_start + not_boundary_end;
-    header->del_count = num_undo_pieces;
-    header->ref_count = 1;
-
-    slice_cursor slice_cursor = {};
-    get_slice_cursor_from_header(&slice_cursor, header);
-
-    // piece_slice slice = { .base = pieces, .count = num_pieces };
-
-    replace_range_(list, start, end, pieces, num_pieces, slice_cursor);
-    result.undo_header = header;
-    return result;
-}
-
-static undo_memory_header *replace_range(
-    piece_list *list,
-    base_iter start,
-    base_iter end,
-    piece *pieces,
-    u32 num_pieces)
-{
-    // list->num_pieces += num_pieces;
-
-    piece *start_piece = get_piece_(&start);
-    piece *end_piece   = get_piece_(&end);
-
-    u32 start_size = start_piece ? start_piece->size : UINT32_MAX;
-
-    u32 num_undo_pieces = 
-        (end.abs_idx + (end.pos_in_piece > 0)) - 
-        (start.abs_idx + (start.pos_in_piece == start_size));
-
-    undo_memory_header *undo_header = allocate_undo_memory_block(
-        &list->history,
-        &list->history_arena,
-        num_undo_pieces);
-
-    undo_header->abs_idx   = start.abs_idx + (start.pos_in_piece == start_size);
-    undo_header->ins_count = num_pieces;
-    undo_header->del_count = num_undo_pieces;
-    undo_header->ref_count = 1;
-
-    slice_cursor slice_cursor = {};
-    get_slice_cursor_from_header(&slice_cursor, undo_header);
-
-    for (u32 i = 0; i < num_pieces; ++i)
-    {
-        piece piece = pieces[i];
-        list->size += piece.size;
-        list->lcnt += piece.lcnt;
-    }
-
-    u32 num_lines_deleted = line_number(&end) - line_number(&start);
-    u32 num_chars_deleted = position(&end) - position(&start);
-
-    list->size -= num_chars_deleted;
-    list->lcnt -= num_lines_deleted;
-
-    cursor start_cursor = { start.node, start.piece_idx };
-    cursor end_cursor   = { end.node, end.piece_idx };
-
-    if (start_piece == end_piece && start.pos_in_piece > 0) 
-    {
-        copy_slice(&slice_cursor, start_piece, 1);
-
-        offset offset = get_offset(&end);
-
-        piece right = { 
-            .size = start_piece->size - end.pos_in_piece,
-            .lcnt = start_piece->lcnt - end.line_in_piece,
-            .off  = offset,
-            .type = start_piece->type,
-        };
-
-        start_cursor.node->size -= start_piece->size - start.pos_in_piece;
-        start_cursor.node->lcnt -= start_piece->lcnt - start.line_in_piece;
-
-        start_piece->size = start.pos_in_piece;
-        start_piece->lcnt = start.line_in_piece;
-
-        add_to_cursor(list, &start_cursor, 1);
-
-        start_cursor = make_space_for_at(list, start_cursor, num_pieces + 1);
-
-        piece_slice p_slice[2];
-        p_slice[0].base = pieces;
-        p_slice[0].count = num_pieces;
-        p_slice[1].base = &right;
-        p_slice[1].count = 1;
-
-        insert_many(start_cursor, p_slice, ArrayCount(p_slice));
-        undo_header->ins_count += 2;
-    }
-    else
-    {
-        if (start.pos_in_piece > 0)
-        {
-            write_start(&slice_cursor, *start_piece);
-            start_cursor.node->size -= start_piece->size - start.pos_in_piece;
-            start_cursor.node->lcnt -= start_piece->lcnt - start.line_in_piece;
-            start_piece->size = start.pos_in_piece;
-            start_piece->lcnt = start.line_in_piece;
-            undo_header->ins_count++;
-            add_to_cursor_(&start_cursor, 1);
-            start.abs_idx++;
-        }
-
-        if (end.pos_in_piece > 0)
-        {
-            write_last(&slice_cursor, *end_piece);
-            end_cursor.node->size -= end.pos_in_piece;
-            end_cursor.node->lcnt -= end.line_in_piece;
-            end_piece->off = get_offset(&end);
-            end_piece->size -= end.pos_in_piece;
-            end_piece->lcnt -= end.line_in_piece;
-            undo_header->ins_count++;
-        }
-
-        // u32 num_pieces_deleted = end.abs_idx - start.abs_idx;
-        // list->num_pieces -= num_pieces_deleted;
-
-        u32 count = end.abs_idx - start.abs_idx;
-
-        if (count)
-        {
-            copy_range(start_cursor, end_cursor, count, &slice_cursor);
-        }
-
-        if (count + num_pieces > 0)
-        {
-            replace(list, start_cursor, end_cursor, pieces,  num_pieces);
-        }
-    }
-    reset_cursor_(&list->iter);
-
-    return undo_header;
-}
-
-static undo_memory_header *range_replace(
-    piece_list *list, 
-    buffer_cursor c0,
-    buffer_cursor c1,
-    piece *pieces,
-    u32 num_pieces)
-{
-    base_iter start = find_cursor(&list->iter, c0);
-    fix_iter(&start);
-    base_iter end   = find_cursor(&list->iter, c1);
-    fix_iter(&end);
-
-    undo_memory_header *result = replace_range(list, start, end, pieces, num_pieces);
-    return result;
-}
+// static undo_memory_header *replace_range(
+//     piece_list *list,
+//     base_iter start,
+//     base_iter end,
+//     piece *pieces,
+//     u32 num_pieces)
+// {
+//     piece *start_piece = get_piece_(&start);
+//     piece *end_piece   = get_piece_(&end);
+//
+//     u32 start_size = start_piece ? start_piece->size : UINT32_MAX;
+//
+//     u32 num_undo_pieces = 
+//         (end.abs_idx + (end.pos_in_piece > 0)) - 
+//         (start.abs_idx + (start.pos_in_piece == start_size));
+//
+//     undo_memory_header *undo_header = allocate_undo_memory_block(
+//         &list->history,
+//         &list->history_arena,
+//         num_undo_pieces);
+//
+//     undo_header->abs_idx   = start.abs_idx + (start.pos_in_piece == start_size);
+//     undo_header->ins_count = num_pieces;
+//     undo_header->del_count = num_undo_pieces;
+//     undo_header->ref_count = 1;
+//
+//     slice_cursor slice_cursor = {};
+//     get_slice_cursor_from_header(&slice_cursor, undo_header);
+//
+//     for (u32 i = 0; i < num_pieces; ++i)
+//     {
+//         piece piece = pieces[i];
+//         list->size += piece.size;
+//         list->lcnt += piece.lcnt;
+//     }
+//
+//     u32 num_lines_deleted = line_number(&end) - line_number(&start);
+//     u32 num_chars_deleted = position(&end) - position(&start);
+//
+//     list->size -= num_chars_deleted;
+//     list->lcnt -= num_lines_deleted;
+//
+//     cursor start_cursor = { start.node, start.piece_idx };
+//     cursor end_cursor   = { end.node, end.piece_idx };
+//
+//     if (start_piece == end_piece && start.pos_in_piece > 0) 
+//     {
+//         copy_slice(&slice_cursor, start_piece, 1);
+//
+//         offset offset = get_offset(&end);
+//
+//         piece right = { 
+//             .size = start_piece->size - end.pos_in_piece,
+//             .lcnt = start_piece->lcnt - end.line_in_piece,
+//             .off  = offset,
+//             .type = start_piece->type,
+//         };
+//
+//         start_cursor.node->size -= start_piece->size - start.pos_in_piece;
+//         start_cursor.node->lcnt -= start_piece->lcnt - start.line_in_piece;
+//
+//         start_piece->size = start.pos_in_piece;
+//         start_piece->lcnt = start.line_in_piece;
+//
+//         add_to_cursor(list, &start_cursor, 1);
+//
+//         start_cursor = make_space_for_at(list, start_cursor, num_pieces + 1);
+//
+//         piece_slice p_slice[2];
+//         p_slice[0].base = pieces;
+//         p_slice[0].count = num_pieces;
+//         p_slice[1].base = &right;
+//         p_slice[1].count = 1;
+//
+//         insert_many(start_cursor, p_slice, ArrayCount(p_slice));
+//         undo_header->ins_count += 2;
+//     }
+//     else
+//     {
+//         if (start.pos_in_piece > 0)
+//         {
+//             write_start(&slice_cursor, *start_piece);
+//             start_cursor.node->size -= start_piece->size - start.pos_in_piece;
+//             start_cursor.node->lcnt -= start_piece->lcnt - start.line_in_piece;
+//             start_piece->size = start.pos_in_piece;
+//             start_piece->lcnt = start.line_in_piece;
+//             undo_header->ins_count++;
+//             add_to_cursor_(&start_cursor, 1);
+//             start.abs_idx++;
+//         }
+//
+//         if (end.pos_in_piece > 0)
+//         {
+//             write_last(&slice_cursor, *end_piece);
+//             end_cursor.node->size -= end.pos_in_piece;
+//             end_cursor.node->lcnt -= end.line_in_piece;
+//             end_piece->off = get_offset(&end);
+//             end_piece->size -= end.pos_in_piece;
+//             end_piece->lcnt -= end.line_in_piece;
+//             undo_header->ins_count++;
+//         }
+//
+//         u32 count = end.abs_idx - start.abs_idx;
+//
+//         if (count)
+//         {
+//             copy_range(start_cursor, end_cursor, count, &slice_cursor);
+//         }
+//
+//         if (count + num_pieces > 0)
+//         {
+//             replace(list, start_cursor, end_cursor, pieces,  num_pieces);
+//         }
+//     }
+//     reset_cursor_(&list->iter);
+//
+//     return undo_header;
+// }
+//
+// static undo_memory_header *range_replace(
+//     piece_list *list, 
+//     buffer_cursor c0,
+//     buffer_cursor c1,
+//     piece *pieces,
+//     u32 num_pieces)
+// {
+//     base_iter start = find_cursor(&list->iter, c0);
+//     fix_iter(&start);
+//     base_iter end   = find_cursor(&list->iter, c1);
+//     fix_iter(&end);
+//
+//     undo_memory_header *result = replace_range(list, start, end, pieces, num_pieces);
+//     return result;
+// }
 
 static void initialize_piece_list(piece_list *list, u8 *original_text, u32 original_text_len)
 {
     DLIST_INIT(&list->root_sentinel);
-    // list->num_pieces  = 0;
     list->size        = 0;
     list->lcnt        = 0;
 
     list->append   = allocate_append_buffer(&list->list_arena);
-    list->original = allocate_original_buffer(&list->list_arena, original_text, original_text_len);
+    list->original = allocate_original_buffer(
+        &list->list_arena, original_text, original_text_len);
 
     list->first_free_node = NULL;
     list->root_sentinel.size = 0;
@@ -2563,12 +2338,12 @@ static void initialize_piece_list(piece_list *list, u8 *original_text, u32 origi
     if (list->original.text_len)
     {
         piece piece = original_piece(&list->original);
-        segmented_node *node = PushStruct(&list->list_arena, segmented_node, NoClear());
+        segmented_node *node = 
+            PushStruct(&list->list_arena, segmented_node, NoClear());
         *node->pieces  = piece;
         list->size = node->size = piece.size;
         list->lcnt = node->lcnt = piece.lcnt;
         node->count = 1;
-        // list->num_pieces = node->count = 1;
         DLIST_INSERT_TAIL(&list->root_sentinel, node);
     }
 
@@ -2578,6 +2353,17 @@ static void initialize_piece_list(piece_list *list, u8 *original_text, u32 origi
     list->lines_inserted = list->lcnt;
     list->lines_deleted  = 0;
     list->wrapped = false;
+
+    list->match_len = 0;
+    list->num_matches = 0;
+    list->first_match_line = 0;
+    list->last_match_line = 0;
+    list->current_match = 0;
+    list->matches_capacity = 0;
+    list->matches = NULL;
+    list->changed_since_last_search = true;
+    list->last_searched_string.len = 0;
+    list->last_searched_string.buffer = NULL;
 
     base_init_(list, Position, &list->iter);
     INIT_LIST_HEAD(&list->window_sentinel);
@@ -2643,6 +2429,169 @@ static void write_buffer_to_file(piece_list *list)
             abort();
         }
     }
+}
+
+static void search_str(piece_list *list, u32 window_size, str search_string)
+{
+    Assert(search_string.len > 0);
+    u32 current_match_cursor = 0;
+    u32 prev_position = 0;
+    u32 match_position = 0;
+    u32 current_position = 0;
+
+    // u32 current_position = 0;
+    b32 in_match = false;
+
+    segmented_node *curr_node = list->root_sentinel.next;
+    segmented_node *prev_node_match = curr_node;
+
+    for(;;)
+    {
+        if (curr_node == &list->root_sentinel)
+        {
+            break;
+        }
+
+        u32 prev_piece_match_index = 0;
+        u32 prev_piece_match_start = 0;
+
+        u32 i = 0;
+
+        while (i < curr_node->count)
+        {
+            piece *curr_piece = curr_node->pieces + i;
+            const buffer *buffer = get_buffer(list, curr_piece->type);
+            u32 offset = buffer->lines[curr_piece->off.row] + curr_piece->off.col;
+            u8 *piece_text_start = buffer->text + offset;
+
+            u32 piece_cursor = 0;
+
+            while (piece_cursor < curr_piece->size)
+            {
+                u8 *text = piece_text_start + piece_cursor;
+
+                if (in_match)
+                {
+                    Assert(current_match_cursor > 0);
+                    u32 remaining_text_size = search_string.len - current_match_cursor;
+                    u32 test_size = Minimum(remaining_text_size, curr_piece->size - piece_cursor);
+
+                    if (!memcmp(search_string.buffer + current_match_cursor, text, test_size))
+                    {
+                        // first test_size bytes matched
+                        if (remaining_text_size <= curr_piece->size - piece_cursor)
+                        {
+                            // found match.
+                            list->match_len = search_string.len;
+                            if (list->matches_capacity <= list->num_matches)
+                            {
+                                list->matches_capacity = Maximum(8, list->matches_capacity * 2);
+                                list->matches = realloc(list->matches, sizeof(u32) * list->matches_capacity);
+                            }
+                            list->matches[list->num_matches++] = match_position;
+                            // g_push(&list->matches, match_position);
+                            in_match = false;
+                            prev_piece_match_index = i;
+                            prev_piece_match_start = piece_cursor + remaining_text_size;
+                            prev_node_match = curr_node;
+                            prev_position = current_position;
+                            current_match_cursor = 0;
+
+                        }
+                        else
+                        {
+                            current_match_cursor += test_size;
+                        }
+                        piece_cursor += remaining_text_size;
+                    }
+                    else
+                    {
+                        // No match. must return to previous match start;
+                        curr_node = prev_node_match;
+                        i = prev_piece_match_index;
+                        piece_cursor = prev_piece_match_start;
+                        current_position = prev_position;
+                        in_match = false;
+                        current_match_cursor = 0;
+                    }
+                }
+                else
+                {
+                    u8 *match_start = 
+                        (u8 *) memchr(text, search_string.buffer[0], curr_piece->size - piece_cursor);
+                    if (match_start)
+                    {
+                        piece_cursor += match_start - text;
+                        match_position = current_position + piece_cursor;
+                        current_match_cursor++;
+                        in_match = true;
+                        piece_cursor++;
+                    }
+                    else
+                    {
+                        piece_cursor = curr_piece->size;
+                    }
+                    prev_piece_match_index = i;
+                    prev_piece_match_start = piece_cursor;
+                    prev_node_match = curr_node;
+                    prev_position = current_position;
+
+                }
+            }
+            current_position += curr_piece->size;
+            i++;
+        }
+        curr_node = curr_node->next;
+    }
+
+    // for (segmented_node *node = list->root_sentinel.next;
+    //     node != &list->root_sentinel;
+    //     node = node->next)
+    // {
+    //     u32 piece_cursor = 0;
+    //     for (u32 i = 0; i < node->count; ++i)
+    //     {
+    //         piece *piece = node->pieces + i;
+    //         const buffer *buffer = get_buffer(list, piece->type);
+    //         u32 offset = buffer->lines[piece->off.row] + piece->off.col;
+    //         u8 *piece_text_start = buffer->text + offset;
+    //
+    //         while (piece_cursor < piece->size)
+    //         {
+    //             u8 *text = text_piece_start + piece_cursor;
+    //
+    //             if (in_match)
+    //             {
+    //                 Assert(current_match_cursor > 0);
+    //                 u32 remaining_text_size = search_string.len - current_match_cursor;
+    //                 u32 test_size = Minimum(remaining_text_size, piece->size - piece_cursor);
+    //
+    //                 if (!memcmp(search_string.buffer + current_match_cursor, text, test_size))
+    //                 {
+    //                     if (remaining_text_size <= piece->size - piece_cursor)
+    //                     {
+    //                         // found match.
+    //                         // record position. 
+    //                         list->match_len = search_string.len;
+    //                         in_match = false;
+    //                     }
+    //                     piece_cursor += remaining_text_size;
+    //                 }
+    //                 else
+    //                 {
+    //                     // Must restart after the start of the current failed match;
+    //                     // This may be in a previous piece or node;
+    //
+    //                 }
+    //             }
+    //             else
+    //             {
+    //
+    //
+    //             }
+    //         }
+    //     }
+    // }
 }
 
 static piece_list *create_buffer(memory_arena *arena, char *filepath)
@@ -2754,14 +2703,14 @@ static replace_result rand_replace_(piece_list *list, prng *prng)
     }
     else
     {
-        result = range_replace__(list, a, b, p_range);
+        result = range_replace(list, a, b, p_range);
     }
     free(pieces);
     return result;
 }
 
 
-static piece_list *rand_list_2(prng *prng)
+static piece_list *rand_list(prng *prng)
 {
     piece_list *list = BootstrapPushStruct(piece_list, list_arena, 4096);
 

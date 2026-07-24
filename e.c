@@ -18,9 +18,6 @@
 
 static void render(editor_state *state)
 {
-    // reset_window_cursor(&state->screen, state->edit_mode);
-
-    // commit_cursor(state->screen.active_window, state->edit_mode);
     piece_list *buffer;
     list_for_each_entry(buffer, &state->buffers, list)
     {
@@ -31,17 +28,11 @@ static void render(editor_state *state)
         }
 
         buffer->changed        = false;
-        buffer->top_changed    = 0;
-        buffer->bot_changed    = 0;
-        buffer->lines_inserted = 0;
-        buffer->lines_deleted  = 0;
     }
 
     if (state->screen.change & Render_RedrawBorders)
     {
-        // set_color(&state->screen, 32);
         draw_borders(&state->screen, state->screen.root_window);
-        // reset_color(&state->screen);
     }
 
     state->screen.change = Render_NoChange;

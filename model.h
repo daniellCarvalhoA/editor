@@ -490,31 +490,6 @@ static model *rand_model(prng *prng)
 
     for (u32 i = 0; i < num_edits; ++i)
     {
-        model_rand_replace(result, prng);
-    }
-
-    if (num_lcnts(result) == 0)
-    {
-        result->line_len = result->s.len;
-    }
-    else
-    {
-        result->line_len = line_position(result, 1) - 1;
-    }
-    return result;
-}
-
-
-static model *rand_model_2(prng *prng)
-{
-    model *result = BootstrapPushStruct(model, arena, 8 * 4096);
-    INIT_STACK_STRING(original_text, MAX_ORIGINAL_STRING_LEN);
-    rand_ascii_string(&original_text, prng, 0, MAX_ORIGINAL_STRING_LEN);
-
-    initialize_model(result, original_text);
-
-    for (u32 i = 0; i < num_edits; ++i)
-    {
         model_rand_replace_2(result, prng);
     }
 

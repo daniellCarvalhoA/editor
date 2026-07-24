@@ -100,6 +100,7 @@ typedef struct piece_list
     char *filepath;
 
     b32 changed;
+    b32 changed_since_last_search;
     u32 top_changed;
     u32 bot_changed;
     u32 lines_inserted;
@@ -126,6 +127,21 @@ typedef struct piece_list
     u32 num_windows;
     dlist window_sentinel;
     dlist list;
+
+    // This concerns search. We calculate matches lazily; meaning
+    // the matches that are kept (if we are not replacing) are the ones 
+    // visible on screen;
+    str last_searched_string;
+    u32 match_len;
+    u32 num_matches;
+    u32 first_match_line;
+    u32 last_match_line;
+    u32 current_match;
+    u32 matches_capacity;
+    u32 *matches;
+
+    // We own this string;
+
 
 } piece_list;
 

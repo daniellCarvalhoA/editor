@@ -21,6 +21,7 @@ typedef enum
     ParseFlags_Quit  = 0x1,
     ParseFlags_Save  = 0x2,
     ParseFlags_Open  = 0x4,
+    ParseFlags_Search = 0x8,
 } parse_flags;
 
 typedef struct
@@ -237,7 +238,7 @@ static b32 process_command(editor_state *state)
         result = (state->screen.active_window == state->screen.command_window);
 
     }
-    clear_buffer(&state->screen.command_window->c_buffer);
+    // clear_buffer(&state->screen.command_window->c_buffer);
     state->screen.command_window->bc.x = 0;
 
     return result;
@@ -258,13 +259,39 @@ static b32 parse_command(editor_state *state, str input)
             clear_buffer(&screen->command_window->c_buffer);
             active_window->bc.x = 0;
             active_window->bc.y = 0;
+
+            piece_list *buffer = interacting_window->buffer;
+            buffer->num_matches = 0;
+            state->searching = false;
+
         } break;
 
         case '\r':
         {
             screen->active_window = interacting_window;
+            if (state->searching)
+            {
+                piece_list *buffer = interacting_window->buffer;
+                buffer->last_searched_string.len    = screen->command_window->c_buffer.len - 1;
+                buffer->last_searched_string.buffer = realloc(
+                        buffer->last_searched_string.buffer,
+                        buffer->last_searched_string.len * sizeof(u8));
+                memcpy(
+                    buffer->last_searched_string.buffer,
+                    (void *) ((u8*) screen->command_window->c_buffer.buffer + 1), 
+                        buffer->last_searched_string.len * sizeof(u8));
+
+                if (buffer->num_matches > 0)
+                {
+                    interacting_window->dc = interacting_window->bc = cursor_from_position(
+                        &buffer->iter,
+                        buffer->matches[buffer->current_match]);
+                }
+                    
+            }
             result = process_command(state);
             clear_buffer(&screen->command_window->c_buffer);
+            state->searching = false;
         } break;
 
         case 127:
@@ -277,6 +304,24 @@ static b32 parse_command(editor_state *state, str input)
         {
             append_char(&screen->command_window->c_buffer, input);
             active_window->bc.x++;
+
+            if (state->searching)
+            {
+                str search_s = from_string(screen->command_window->c_buffer);
+                search_s.buffer++;
+                search_s.len--;
+                if (search_s.len > 0)
+                {
+                    if (interacting_window->buffer->matches)
+                    {
+                        interacting_window->buffer->matches_capacity = 0;
+                        interacting_window->buffer->num_matches = 0;
+                        interacting_window->buffer->current_match = 0;
+                    }
+                    search_str(interacting_window->buffer, 0, search_s);
+                }
+
+            }
         } break;
     }
     return result;

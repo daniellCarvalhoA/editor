@@ -19,6 +19,8 @@ static parse_result parse_normal(editor_state *editor, str token)
         return NotDone;
     }
 
+
+
     if (p_state->state == Middle && m_spec->motion_type == Motion_NoMotion)
     {
         if  (m_spec->flags & Range)
@@ -54,6 +56,35 @@ static parse_result parse_normal(editor_state *editor, str token)
             result = Ok;
              
         } break;
+
+        case 'n':
+        {
+            piece_list *buffer = (*active_window)->buffer;
+            if (buffer->changed_since_last_search && (buffer->last_searched_string.len > 0))
+            {
+                buffer->matches_capacity = 0;
+                buffer->num_matches = 0;
+                search_str(buffer, 0, buffer->last_searched_string);
+                buffer->changed_since_last_search = false;
+            }
+
+            if (buffer->num_matches > 0)
+            {
+                buffer->current_match = (buffer->current_match + 1) % buffer->num_matches;
+                (*active_window)->bc = (*active_window)->dc = cursor_from_position(
+                    &buffer->iter,
+                    buffer->matches[buffer->current_match]);
+            }
+        } break;
+
+        case '/':
+        {
+            interacting_window = *active_window;
+            *active_window = editor->screen.command_window;
+            editor->searching = true;
+            parse_command(editor, token);
+        } break;
+
         case ':':
         {
             if (editor->edit_mode == Normal)
@@ -127,6 +158,7 @@ static parse_result parse_normal(editor_state *editor, str token)
             else
             {
                 m_spec->motion_type = Motion_Word;
+                m_spec->motion_quantifier = Maximum(1, m_spec->motion_quantifier);
                 result = Ok;
             }
         } break;
@@ -201,6 +233,7 @@ static parse_result parse_normal(editor_state *editor, str token)
             else if (p_state->state == Middle && a_spec->action_type == Delete)
             {
                 m_spec->motion_type = Motion_Vertical;
+                m_spec->flags |= Backword;
                 result = Ok;
             } 
             else if (p_state->state == Start)
@@ -217,17 +250,21 @@ static parse_result parse_normal(editor_state *editor, str token)
             if (is_visual(editor->edit_mode))
             {
                 a_spec->action_type = Delete;
+                m_spec->flags |= Exclusive;
                 result = Ok;
             }
             else if (p_state->state == Middle && a_spec->action_type == Delete)
             {
                 m_spec->motion_type = Motion_Vertical;
+                m_spec->flags |= Backword;
+                m_spec->flags |= Exclusive;
                 result = Ok;
             } 
             else if (p_state->state == Start)
             {
                 a_spec->action_type = Delete;
                 p_state->state = Middle;
+                m_spec->flags |= Exclusive;
                 result = NotDone;
             } 
         } break;
@@ -353,12 +390,12 @@ static parse_result parse_normal(editor_state *editor, str token)
             {
                 m_spec->motion_type = Motion_Vertical;
                 m_spec->motion_quantifier = get_height(&editor->screen, *active_window) / 2;
-
                 result = Ok;
             }
             else
             {
                 m_spec->motion_type = Motion_Vertical;
+                m_spec->motion_quantifier = Maximum(1, m_spec->motion_quantifier);
                 result = Ok;
             }
         } break;
@@ -376,6 +413,7 @@ static parse_result parse_normal(editor_state *editor, str token)
             {
                 m_spec->motion_type = Motion_Vertical;
                 m_spec->flags |= Backword;
+                m_spec->motion_quantifier = Maximum(1, m_spec->motion_quantifier);
                 result = Ok;
             }
         } break;
@@ -571,16 +609,12 @@ static undo_node *change(window *win, paste_buffer *p_buffer, win_range w_range,
 
         // NOTE: this is wrong, inserted_count is in bytes / this must 
         // be in grapheme clusters.
-        // Its is also wrong becaus it assumes a one line insertion.
+        // Its is also wrong because it assumes a one line insertion.
         win->dc.x += inserted.len;
         win->bc.x = win->dc.x;
     }
 
-    replace_result rep = range_replace__(
-        win->buffer,
-        w_range.first,
-        w_range.one_past_end,
-        p_range);
+    replace_result rep = range_replace(win->buffer, w_range.first, w_range.one_past_end, p_range);
 
     rep.undo_header->ref_count++;
 
@@ -763,7 +797,7 @@ static void edit(editor_state *state)
                     } break;
                 }
 
-                replace_result rep = range_replace__(win->buffer, range.first, range.one_past_end, p_range);
+                replace_result rep = range_replace(win->buffer, range.first, range.one_past_end, p_range);
 
                 node->data = rep.undo_header;
 
@@ -774,7 +808,7 @@ static void edit(editor_state *state)
                     // a lot of replaces into a single big replace.
                     while (num_repeat > 0)
                     {
-                        replace_result rep = range_replace__(win->buffer, win->dc, win->dc, p_range);
+                        replace_result rep = range_replace(win->buffer, win->dc, win->dc, p_range);
                         LIST_INSERT(node->data->next, rep.undo_header);
                         num_repeat--;
                     }

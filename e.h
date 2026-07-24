@@ -85,7 +85,6 @@ typedef struct
     u8 close;
 } char_pair;
 
-
 static char_pair open_close_pairs[] = 
 {
     { '(', ')' },
@@ -110,7 +109,6 @@ static inline i32 get_pair(u8 token)
     return result;
 }
 
-
 typedef struct editor_state
 {
     memory_arena arena;
@@ -120,6 +118,8 @@ typedef struct editor_state
     mode edit_mode;
     normal_parse_state p_state;
     command prev_command;
+
+    b32 searching;
 } editor_state;
 
 

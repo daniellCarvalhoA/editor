@@ -339,7 +339,7 @@ int main(int argc, char **argv) {
     if (argc > 1)
     {
         test_code test_code;
-        test_code.code = dlopen("/home/paula/c/e/build/tests.so", RTLD_LAZY);
+        test_code.code = dlopen("/home/daniel/c/e/build/tests.so", RTLD_LAZY);
         if (strings_are_equal(argv[1], "-p"))
         {
             struct stat stat_buf;
