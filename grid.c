@@ -50,6 +50,8 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
     win_cursor visual_cursor = win->vc; // { .x = win->vcx, .y = win->vcy }; 
     win_cursor curr_cursor   = win->bc; //{ .x = win->bcx, .y = win->bcy };
     win_range range = make_range(visual_cursor, curr_cursor);
+
+    u32 current_match = 0;
     while (not_over && line < win->top_line + height)
     {
         u32 i = 0;
@@ -72,6 +74,7 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
 
         u32 col = 0;
         u32 v_col = 0;
+        u32 position = get_position(&iter);
         while (not_over && col < width)
         {
             cell_item item   = base_next_cell(&iter);
@@ -99,10 +102,7 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
                 u32 next_col = 1 + col;
                 u32 tab_length = 1 + TAB_STOP - (next_col % TAB_STOP);
                 tab_length = Minimum(tab_length, width - col);
-                memset(
-                    g_line.grid->types + g_line.line_start + col,
-                    type,
-                    tab_length);
+                memset(g_line.grid->types + g_line.line_start + col, type, tab_length);
                 u8 *data = get_cell_data(g_line, col, type);
                 attr *at = get_cell_attr_(g_line, col);
 
@@ -113,17 +113,30 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
                         .x = col + tab_length - 1,
                         .y = line  - win->top_line
                     };
-                    win_cursor w_cursor = map_screen_cursor_to_win_cursor(
-                        active_window,
-                        s_cursor); 
+                    win_cursor w_cursor = map_screen_cursor_to_win_cursor(active_window, s_cursor); 
 
-                    if (is_in_range(range, w_cursor, edit_mode)) // && 
-                        // compare(w_cursor, active_window->bc) != EqualTo)
+                    if (is_in_range(range, w_cursor, edit_mode)) 
                     {
                         memset(at, Reversed, tab_length);
                     }
                 }
 
+
+                if (current_match < win->buffer->num_matches) 
+                {
+                    u32 match_position = win->buffer->matches[current_match];
+                    if (position < match_position)
+                    {
+                    }
+                    else if (position >= match_position && position < match_position + win->buffer->match_len)
+                    {
+                        memset(at, Reversed, sizeof(attr));
+                    }
+                    else
+                    {
+                        current_match++;
+                    }
+                }
                 u8 *gv_col = get_cell_vcol_(g_line, v_col);
                 *gv_col = tab_length;
                 
@@ -144,15 +157,28 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
                 if (is_visual(edit_mode)) 
                 {
                     screen_cursor s_cursor = { .x = col, .y = line  - win->top_line};
-                    win_cursor w_cursor = map_screen_cursor_to_win_cursor(
-                        active_window,
-                        s_cursor); 
+                    win_cursor w_cursor = map_screen_cursor_to_win_cursor(active_window, s_cursor); 
 
-
-                    if (is_in_range(range, w_cursor, edit_mode)) //&& 
-                        // compare(w_cursor, active_window->bc) != EqualTo)
+                    if (is_in_range(range, w_cursor, edit_mode)) 
                     {
                         *at = Reversed;
+                    }
+                }
+
+                if (current_match < win->buffer->num_matches) 
+                {
+                    u32 match_position = win->buffer->matches[current_match];
+                    if (position < match_position)
+                    {
+                    }
+                    else if (position >= match_position && position < match_position + win->buffer->match_len)
+                    {
+                        *at = Reversed;
+                        // memset(at, Reversed, sizeof(attr));
+                    }
+                    else
+                    {
+                        current_match++;
                     }
                 }
                 u8 *gv_col = get_cell_vcol_(g_line, v_col);
@@ -163,6 +189,7 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
                 not_over = item.valid;
             }
             v_col++;
+            position += item.len;
         }
 
         if (col == width)
@@ -184,7 +211,6 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
         {
             types[i] = U8;
         }
-        // memset(types, U8, sizeof(grid_type) * width);
         memset(attribute, Reversed, width);
 
         u32 len = 0;

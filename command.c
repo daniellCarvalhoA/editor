@@ -297,6 +297,30 @@ static b32 parse_command(editor_state *state, str input)
         case 127:
         {
             pop(&screen->command_window->c_buffer);
+            if (state->searching)
+            {
+                str search_s = from_string(screen->command_window->c_buffer);
+                search_s.buffer++;
+                search_s.len--;
+                piece_list *buffer = interacting_window->buffer;
+                if (search_s.len > 0)
+                {
+                    if (buffer->matches)
+                    {
+                        buffer->matches_capacity = 0;
+                        buffer->num_matches = 0;
+                        buffer->current_match = 0;
+                    }
+                    search_str(buffer, 0, search_s);
+                }
+                else
+                {
+                    buffer->matches_capacity = 0;
+                    buffer->num_matches = 0;
+                    buffer->current_match = 0;
+                }
+                buffer->changed = true;
+            }
             active_window->bc.x--;
         } break;
 
@@ -312,13 +336,19 @@ static b32 parse_command(editor_state *state, str input)
                 search_s.len--;
                 if (search_s.len > 0)
                 {
-                    if (interacting_window->buffer->matches)
+                    piece_list *buffer = interacting_window->buffer;
+                    if (buffer->matches)
                     {
-                        interacting_window->buffer->matches_capacity = 0;
-                        interacting_window->buffer->num_matches = 0;
-                        interacting_window->buffer->current_match = 0;
+                        buffer->matches_capacity = 0;
+                        buffer->num_matches = 0;
+                        buffer->current_match = 0;
                     }
-                    search_str(interacting_window->buffer, 0, search_s);
+                    search_str(buffer, 0, search_s);
+
+                    if (buffer->num_matches > 0)
+                    {
+                        buffer->changed = true;
+                    }
                 }
 
             }
