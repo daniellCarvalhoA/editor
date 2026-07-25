@@ -14,7 +14,7 @@ u32 num_insert_pieces = 32;
 #define MAX_STRING_LEN 40
 #define MAX_ORIGINAL_STRING_LEN 40
 #define MAX_INSERT_MODE_SEQ 10
-#define MAX_UNDO_REDO_SEQ 3
+#define MAX_UNDO_REDO_SEQ 10
 #define MAX_SEQ 10
 #define MAX_LINE_LEN 40
 
@@ -69,7 +69,7 @@ typedef struct
     win_cursor max;
     string text_added;
 } insert_seq_result;
-//
+
 static insert_seq_result *create(u32 max_length)
 {
     insert_seq_result *result = (insert_seq_result *) malloc(sizeof(insert_seq_result)); 
@@ -79,13 +79,13 @@ static insert_seq_result *create(u32 max_length)
     result->text_added.buffer = malloc(max_length);
     return result;
 }
-//
+
 static void free_insert_seq_result(insert_seq_result *seq)
 {
     free(seq->text_added.buffer);
     free(seq);
 }
-//
+
 static void clear_seq(insert_seq_result *seq)
 {
     seq->min.x = seq->max.x = seq->min.y = seq->max.y = 0;
@@ -99,19 +99,17 @@ static void insert_mode_sequence(window *win, prng *prng, insert_seq_result *seq
     seq->max = win->bc;
     u32 seq_size = rand_range_u32_inclusive(prng, 1, MAX_INSERT_MODE_SEQ);
 
-    // state_result s_result = {};
     for (u32 i = 0; i < seq_size; ++i)
     {
         if (rand_b32(prng))
         {
             INIT_STACK_STRING(text, MAX_STRING_LEN);
             rand_ascii_string(&text, prng, 1, MAX_STRING_LEN);
-            push_string(&seq->text_added, &text);
+            push_string(&seq->text_added, from_string(text));
             for (u32 j = 0; j < text.len; ++j)
             {
-                // char c = (char) text.buffer[j];
                 str s = { .buffer = (u8 *) text.buffer + j, .len = 1 };
-                insert_mode_insert(win, s); // , &s_result);
+                insert_mode_insert(win, s);
             }
         }
         else
@@ -205,7 +203,7 @@ void undo(prng *prng)
     for (u32 i = 0; i < num_reversible_edits; ++i)
     {
         undo_node *node = allocate_tree_node(&list->history_arena);
-        replace_result rep = rand_replace_(list, prng);
+        replace_result rep = rand_replace(list, prng);
         if (rep.undo_header)
         {
             node->data = rep.undo_header;
@@ -249,7 +247,7 @@ void undo_redo(prng *prng)
     for (u32 i = 0; i < num_reversible_edits; ++i)
     {
         undo_node *node = allocate_tree_node(&list->history_arena);
-        replace_result rep = rand_replace_(list, prng);
+        replace_result rep = rand_replace(list, prng);
         if (rep.undo_header)
         {
             node->data = rep.undo_header;
@@ -262,7 +260,6 @@ void undo_redo(prng *prng)
         }
     }
 
-    // u32 num_pieces_before = list->num_pieces;
     u32 size_before = list->size;
     u32 lcnt_before = list->lcnt;
 
@@ -276,7 +273,6 @@ void undo_redo(prng *prng)
 
     write_to_buffer(list, after, list->size);
 
-    // Assert(num_pieces_before == list->num_pieces);
     Assert(size_before == list->size);
     Assert(lcnt_before == list->lcnt);
     Assert(strncmp((const char *) before, (const char *) after, list->size) == 0);
@@ -284,6 +280,103 @@ void undo_redo(prng *prng)
     list_invariants(list);
     free_piece_list(list);
     free_screen(&screen);
+}
+
+TEST(search_string)
+void search_string(prng *prng)
+{
+    screen screen = {};
+    initialize_screen(&screen);
+    window *win = create_window(&screen, LeafBuffer, 0);
+    piece_list *list = rand_list(prng);
+    map_buffer_to_window(list, win);
+
+    INIT_STACK_STRING(s, MAX_STRING_LEN);
+    do 
+    {
+        rand_ascii_string(&s, prng, 1, MAX_STRING_LEN);
+    } while (s.len == 0);
+
+    piece piece = make_piece(list, from_string(s));
+
+    piece_range p_range = { .pieces = &piece, .count = 1 };
+
+    buffer_cursor bc = rand_buffer_cursor(list, prng);
+
+    range_replace(list, bc, bc, p_range);
+
+    search_str(list, 0, from_string(s));
+
+    b32 found = false;
+
+    for (u32 i = 0; i < list->num_matches; ++i)
+    {
+        u32 test_position = list->matches[i];
+        buffer_cursor test_cursor = cursor_from_position(&list->iter, test_position);
+        found |= (test_cursor.x == bc.x && test_cursor.y == bc.y);
+    }
+
+    Assert(found);
+    free_piece_list(list);
+    free_screen(&screen);
+}
+
+TEST(search_string_2)
+void search_string_2(prng *prng)
+{
+    screen screen = {};
+    initialize_screen(&screen);
+    window *win = create_window(&screen, LeafBuffer, 0);
+    piece_list *list = rand_list(prng);
+    map_buffer_to_window(list, win);
+
+    buffer_range br = rand_buffer_range(list, prng);
+
+    base_iter iter = find_cursor(&list->iter, br.first);
+    u32 start_position = position(&iter);
+    iter = find_cursor(&list->iter, br.one_past_end);
+    u32 end_position = position(&iter);
+
+    if (start_position == end_position)
+    {
+
+        free_piece_list(list);
+        free_screen(&screen);
+        search_string_2(prng);
+        return;
+    }
+
+    Assert(end_position >= start_position);
+
+     
+    string s_string = {};
+    s_string.capacity = end_position - start_position;
+    s_string.buffer = (u8 *) malloc(sizeof(u8) * s_string.capacity);
+
+    replace_result rep = yank_(list, br.first, br.one_past_end);
+
+    piece_range p_range = *(piece_range *) &rep;
+
+    write_piece_text(list, p_range, &s_string);
+
+    Assert(s_string.len == s_string.capacity);
+
+    search_str(list, 0, from_string(s_string));
+
+    b32 found = false;
+
+    for (u32 i = 0; i < list->num_matches; ++i)
+    {
+        u32 test_position = list->matches[i];
+        found |= (test_position == start_position);
+    }
+
+    Assert(found);
+    free_piece_list(list);
+    free_screen(&screen);
+
+    free(s_string.buffer);
+
 }
 
 TEST(insert_mode_seq)
@@ -355,7 +448,7 @@ void insert_mode_seq(prng *p)
 
             if (seq->text_added.len > 0)
             {
-                piece piece = make_piece_s(list_b, from_string(seq->text_added));
+                piece piece = make_piece(list_b, from_string(seq->text_added));
                 piece_range p_range = { .pieces = &piece, .count = 1 };
                 replace_result rep = range_replace(list_b, seq->min, seq->max, p_range);
                 node->data = rep.undo_header;

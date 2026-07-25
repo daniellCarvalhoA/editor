@@ -702,6 +702,7 @@ static inline b32 base_prev_cell(base_iter *iter)
             iter->piece_line    = iter->node->lcnt - iter->node->pieces[iter->piece_idx].lcnt;
             iter->piece_pos     = iter->node->size - iter->node->pieces[iter->piece_idx].size;
             iter->pos_in_piece  = iter->node->pieces[iter->piece_idx].size;
+            iter->line_in_piece = iter->node->pieces[iter->piece_idx].lcnt;
         }
 
         if (iter->pos_in_piece == 0)
@@ -724,12 +725,7 @@ static inline b32 base_prev_cell(base_iter *iter)
         Assert(iter->pos_in_piece >= cell.len);
         iter->line_in_piece -= (cell.buffer[0] == '\n');
         iter->pos_in_piece -= cell.len;
-        return true;
-
-
-        // const u8
     }
-
     return true;
 }
 

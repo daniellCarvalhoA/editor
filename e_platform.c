@@ -432,10 +432,8 @@ int main(int argc, char **argv)
 
             if (fds[2].revents & POLLIN)
             {
-                fprintf(stderr, "here\n");
                 struct signalfd_siginfo si;
 
-                // fprintf(stderr, "signal number = %d\n", si.ssi_code)
 
                 int n = read(sfd, &si, sizeof(si));
                 if (n == -1)
@@ -464,7 +462,6 @@ int main(int argc, char **argv)
     }
     reset_mode();
 
-    printf("Listening for events stopped.\n");
     close(ifd);
     free(wd);
 

@@ -2,18 +2,6 @@
 
 typedef struct
 {
-    u32 count;
-    union {
-        undo_memory_header *undo_header;
-        piece *pieces;
-    };
-    u32 start;
-    u32 end;
-    edit_flags flags;
-} replace_result;
-
-typedef struct
-{
     const piece *base;
     u32 count;
 } piece_slice;
@@ -146,12 +134,6 @@ static piece make_piece(piece_list *list, str s)//  u8 *text, u32 text_len)
     new_piece.type    = BufferType_Append;
 
     return new_piece;
-}
-
-static inline piece make_piece_s(piece_list *list, str s)
-{
-    piece result = make_piece(list, s);
-    return result;
 }
 
 static piece make_piece_from_char(piece_list *list, char c)
@@ -1804,6 +1786,60 @@ static void insert_many(cursor at, piece_slice *slices, u32 num_slices)
 //     reset_cursor_(&list->iter);
 // }
 
+static void write_piece_text(piece_list *a, piece_range p_range, string *buf)
+{
+    Assert(buf->len == 0);
+
+    for (u32 i = 0; i < p_range.count; ++i)
+    {
+        u32 start = 0;
+        const piece *a_piece = p_range.pieces + i;
+        u32 end   = a_piece->size;
+        if (i == 0 && 
+            (((p_range.flags & Edit_Left) != 0) || ((p_range.flags & Edit_Both) != 0 )))
+        {
+            start = p_range.start;
+        } 
+
+        if (i == p_range.count - 1 && 
+            (((p_range.flags & Edit_Right) != 0) || ((p_range.flags & Edit_Both) != 0)))
+        {
+            end = p_range.end;
+        }
+
+        const buffer *buffer = get_buffer(a, a_piece->type);
+
+        offset start_offset = (start) ? (search_piece(buffer, *a_piece, start)) : a_piece->off;
+        u32 size_len = end - start;
+        // u32 line_len = (end == a_piece->size) ?
+        //     (a_piece->lcnt - (start_offset.row - a_piece->off.row)) :
+        //     search_piece(buffer, *a_piece, end).row - start_offset.row;
+
+
+        u8 *src_text = buffer->text + buffer->lines[start_offset.row] + start_offset.col;
+        // u8 *dst_text = b->append.text + b->append.text_len;
+        str src = { .buffer = src_text, .len = size_len };
+        push_string(buf, src);
+        // memcpy(dst_text, src_text, size_len);
+        // b->append.text_len += size_len;
+        //
+        // u32 *src_lines = buffer->lines + start_offset.row;
+        // u32 *dst_lines = a->append.lines + a->append.num_lines - 1;
+        // memcpy(dst_lines, src_lines, line_len);
+        //
+        // for (u32 i = 0; i < line_len; ++i)
+        // {
+        //     dst_lines[i] = dst_lines[i] - buffer->num_lines + b->append.num_lines;
+        // }
+        // b->append.num_lines += line_len;
+
+    }
+    // return result;
+
+
+
+}
+
 static piece serialize_piece_range_to(piece_list *a, piece_list *b, piece_range p_range_a)
 {
     piece result = {};
@@ -1816,12 +1852,14 @@ static piece serialize_piece_range_to(piece_list *a, piece_list *b, piece_range 
         u32 start = 0;
         const piece *a_piece = p_range_a.pieces + i;
         u32 end   = a_piece->size;
-        if (i == 0)
+        if (i == 0 && 
+            (((p_range_a.flags & Edit_Left) != 0) || ((p_range_a.flags & Edit_Both) != 0 )))
         {
             start = p_range_a.start;
         } 
 
-        if (i == p_range_a.count - 1)
+        if (i == p_range_a.count - 1 && 
+            (((p_range_a.flags & Edit_Right) != 0) || ((p_range_a.flags & Edit_Both) != 0)))
         {
             end = p_range_a.end;
         }
@@ -1830,8 +1868,7 @@ static piece serialize_piece_range_to(piece_list *a, piece_list *b, piece_range 
 
         offset start_offset = (start) ? (search_piece(buffer, *a_piece, start)) : a_piece->off;
         u32 size_len = end - start;
-        u32 line_len = (end == a_piece->size) ? (a_piece->lcnt - (start_offset.row - a_piece->off.row)) :
-            search_piece(buffer, *a_piece, end).row - start_offset.row;
+        u32 line_len = (end == a_piece->size) ? (a_piece->lcnt - (start_offset.row - a_piece->off.row)) : search_piece(buffer, *a_piece, end).row - start_offset.row;
 
         result.size += size_len;
         result.lcnt += line_len;
@@ -1855,7 +1892,7 @@ static piece serialize_piece_range_to(piece_list *a, piece_list *b, piece_range 
     return result;
 }
 
-static replace_result  yank_(piece_list *list, buffer_cursor c0, buffer_cursor c1)
+static replace_result yank_(piece_list *list, buffer_cursor c0, buffer_cursor c1)
 {
     replace_result result = {};
     base_iter start = find_cursor(&list->iter, c0);
@@ -2431,6 +2468,7 @@ static void write_buffer_to_file(piece_list *list)
     }
 }
 
+// NOTE: THIS IS VERY UNOPTIMISED
 static void search_str(piece_list *list, u32 window_size, str search_string)
 {
     Assert(search_string.len > 0);
@@ -2445,6 +2483,9 @@ static void search_str(piece_list *list, u32 window_size, str search_string)
     segmented_node *curr_node = list->root_sentinel.next;
     segmented_node *prev_node_match = curr_node;
 
+    u32 prev_piece_match_index = 0;
+    u32 prev_piece_match_start = 0;
+
     for(;;)
     {
         if (curr_node == &list->root_sentinel)
@@ -2452,19 +2493,17 @@ static void search_str(piece_list *list, u32 window_size, str search_string)
             break;
         }
 
-        u32 prev_piece_match_index = 0;
-        u32 prev_piece_match_start = 0;
 
         u32 i = 0;
 
         while (i < curr_node->count)
         {
+            u32 piece_cursor = 0;
+start:
             piece *curr_piece = curr_node->pieces + i;
             const buffer *buffer = get_buffer(list, curr_piece->type);
             u32 offset = buffer->lines[curr_piece->off.row] + curr_piece->off.col;
             u8 *piece_text_start = buffer->text + offset;
-
-            u32 piece_cursor = 0;
 
             while (piece_cursor < curr_piece->size)
             {
@@ -2489,20 +2528,21 @@ static void search_str(piece_list *list, u32 window_size, str search_string)
                                 list->matches = realloc(list->matches, sizeof(u32) * list->matches_capacity);
                             }
                             list->matches[list->num_matches++] = match_position;
-                            // g_push(&list->matches, match_position);
+                            curr_node = prev_node_match;
+                            i = prev_piece_match_index;
+                            piece_cursor = prev_piece_match_start;
+                            current_position = prev_position;
                             in_match = false;
-                            prev_piece_match_index = i;
-                            prev_piece_match_start = piece_cursor + remaining_text_size;
-                            prev_node_match = curr_node;
-                            prev_position = current_position;
                             current_match_cursor = 0;
-
+                            goto start;
                         }
                         else
                         {
+                            // must keep scanning
                             current_match_cursor += test_size;
+                            piece_cursor += remaining_text_size;
                         }
-                        piece_cursor += remaining_text_size;
+                        // if i know the searched string
                     }
                     else
                     {
@@ -2513,6 +2553,7 @@ static void search_str(piece_list *list, u32 window_size, str search_string)
                         current_position = prev_position;
                         in_match = false;
                         current_match_cursor = 0;
+                        goto start;
                     }
                 }
                 else
@@ -2542,6 +2583,18 @@ static void search_str(piece_list *list, u32 window_size, str search_string)
             i++;
         }
         curr_node = curr_node->next;
+    }
+
+    if (in_match)
+    {
+        list->match_len = search_string.len;
+        if (list->matches_capacity <= list->num_matches)
+        {
+            list->matches_capacity = Maximum(8, list->matches_capacity * 2);
+            list->matches = realloc(list->matches, sizeof(u32) * list->matches_capacity);
+        }
+        list->matches[list->num_matches++] = match_position;
+
     }
 
     // for (segmented_node *node = list->root_sentinel.next;
@@ -2629,7 +2682,56 @@ static void write_to_buffer(piece_list *list, u8 *buf, u32 len)
 
 #if TESTS
 
-static replace_result rand_replace_(piece_list *list, prng *prng)
+
+static buffer_cursor rand_buffer_cursor(piece_list *list, prng *prng)
+{
+    test_cursor result = rand_cursor(prng, MAX_LINE_LEN, list->lcnt);
+    u32 line_len = get_line_len_(&list->iter, result.y);
+    result.x = Minimum(result.x, line_len);
+    return result;
+}
+
+static buffer_range rand_buffer_range(piece_list *list, prng *prng)
+{
+    // Assert(list->size);
+    buffer_range result = {};
+    b32 found = false;
+    for(;!found;)
+    {
+        result.first = rand_cursor(prng, MAX_LINE_LEN, list->lcnt);
+        result.one_past_end = rand_cursor(prng, MAX_LINE_LEN, list->lcnt);
+
+        switch (compare(result.first, result.one_past_end))
+        {
+            case LessThan:
+            {
+                found = true;
+            } break;
+
+            case GreaterThan:
+            {
+                test_cursor tmp = result.first;
+                result.first = result.one_past_end;
+                result.one_past_end = tmp;
+                found = true;
+            } break;
+
+            case EqualTo:
+            {
+            } break;
+        }
+    }
+
+
+    u32 line_len_a = get_line_len_(&list->iter, result.first.y);
+    u32 line_len_b = get_line_len_(&list->iter, result.one_past_end.y);
+    result.first.x = Minimum(result.first.x, line_len_a);
+    result.one_past_end.x = Minimum(result.one_past_end.x, line_len_b);
+
+    return result;
+}
+
+static replace_result rand_replace(piece_list *list, prng *prng)
 {
     replace_result result = {};
     if (list->size + num_insert_pieces == 0) 
@@ -2693,7 +2795,7 @@ static replace_result rand_replace_(piece_list *list, prng *prng)
         rand_ascii_string(&s, prng, 1, MAX_STRING_LEN);
         if (s.len > 0)
         {
-            pieces[i] = make_piece_s(list, from_string(s));
+            pieces[i] = make_piece(list, from_string(s));
         }
     }
 
@@ -2719,7 +2821,7 @@ static piece_list *rand_list(prng *prng)
 
     for (u32 i = 0; i < num_edits; ++i)
     {
-        rand_replace_(list, prng);
+        rand_replace(list, prng);
     }
 
     return list;

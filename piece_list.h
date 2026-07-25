@@ -84,12 +84,24 @@ typedef enum
 
 typedef struct
 {
-    const piece *pieces;
     u32 count;
-    edit_flags flags;
+    const piece *pieces;
     u32 start;
     u32 end;
+    edit_flags flags;
 } piece_range;
+
+typedef struct
+{
+    u32 count;
+    union {
+        undo_memory_header *undo_header;
+        piece *pieces;
+    };
+    u32 start;
+    u32 end;
+    edit_flags flags;
+} replace_result;
 
 typedef struct piece_list
 {
@@ -139,6 +151,7 @@ typedef struct piece_list
     u32 current_match;
     u32 matches_capacity;
     u32 *matches;
+
 
     // We own this string;
 
@@ -220,6 +233,10 @@ static b32 freelist_sanity_check(piece_list *list)
 
 static inline void free_piece_list(piece_list *list)
 {
+    if (list->matches)
+    {
+        free(list->matches);
+    }
     // NOTE: Order matters!! list is bottstraped onto list_arena.
     free_arena(&list->insert_state_arena);
     free_arena(&list->history_arena);

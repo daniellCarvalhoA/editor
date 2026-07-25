@@ -71,6 +71,10 @@ static WORK_QUEUE_CALLBACK(do_test_work)
                 prng p;
                 // Is there a need to go to the os here, 
                 // maybe call next on the prng, reseed??
+                // if (strcmp(test_name, "search_string") == 0)
+                // {
+                //     fprintf(stderr, "seed = %lu\n", log->seed);
+                // }
                 from_system_entropy(&entropy, &p);
                 test(&p);
             }

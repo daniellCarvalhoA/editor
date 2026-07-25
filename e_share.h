@@ -183,11 +183,11 @@ static string char_str_to_string(char *str)
     u8 buffer[(s_cap)]; \
     string (s_name) = { .len = 0, .capacity = (s_cap), .buffer = buffer };
 
-static void push_string(string *dst, string *src)
+static void push_string(string *dst, str src)
 {
-    Assert(dst->len + src->len <= dst->capacity);
-    memcpy(dst->buffer + dst->len, src->buffer, src->len);
-    dst->len += src->len;
+    Assert(dst->len + src.len <= dst->capacity);
+    memcpy(dst->buffer + dst->len, src.buffer, src.len);
+    dst->len += src.len;
 }
 
 static u32 count_token(string s, u8 token) 
