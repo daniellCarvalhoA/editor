@@ -1,4 +1,3 @@
-#include <utf8proc.h>
 #include <sys/mman.h>
 #include <sys/inotify.h>
 #include <sys/signalfd.h>

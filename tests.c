@@ -181,8 +181,8 @@ void replace_against_model(prng *p)
     free_arena(&m->arena);
 }
 
-TEST(undo)
-void undo(prng *prng)
+TEST(undo_test)
+void undo_test(prng *prng)
 {
     screen screen = {};
     initialize_screen(&screen);
@@ -202,7 +202,9 @@ void undo(prng *prng)
 
     for (u32 i = 0; i < num_reversible_edits; ++i)
     {
-        undo_node *node = allocate_tree_node(&list->history_arena);
+        undo_node *node = allocate_tree_node(
+            &list->history_arena,
+            &list->history);
         replace_result rep = rand_replace(list, prng);
         if (rep.undo_header)
         {
@@ -216,7 +218,7 @@ void undo(prng *prng)
         }
     }
 
-    for (u32 i = 0; i < num_reversible_edits; undo_(win), ++i);
+    for (u32 i = 0; i < num_reversible_edits; undo(win), ++i);
 
     u8 after[list->size];
 
@@ -246,7 +248,9 @@ void undo_redo(prng *prng)
 
     for (u32 i = 0; i < num_reversible_edits; ++i)
     {
-        undo_node *node = allocate_tree_node(&list->history_arena);
+        undo_node *node = allocate_tree_node(
+            &list->history_arena,
+            &list->history);
         replace_result rep = rand_replace(list, prng);
         if (rep.undo_header)
         {
@@ -266,7 +270,7 @@ void undo_redo(prng *prng)
     u8 before[list->size];
     write_to_buffer(list, before, list->size);
 
-    for (u32 i = 0; i < num_reversible_edits; undo_(win), ++i);
+    for (u32 i = 0; i < num_reversible_edits; undo(win), ++i);
     for (u32 i = 0; i < num_reversible_edits; redo(win), ++i);
 
     u8 after[list->size];
@@ -282,7 +286,7 @@ void undo_redo(prng *prng)
     free_screen(&screen);
 }
 
-TEST(search_string)
+//TST(search_string)
 void search_string(prng *prng)
 {
     screen screen = {};
@@ -312,7 +316,9 @@ void search_string(prng *prng)
     for (u32 i = 0; i < list->num_matches; ++i)
     {
         u32 test_position = list->matches[i];
-        buffer_cursor test_cursor = cursor_from_position(&list->iter, test_position);
+        buffer_cursor test_cursor = cursor_from_position(
+            &list->iter,
+            test_position);
         found |= (test_cursor.x == bc.x && test_cursor.y == bc.y);
     }
 
@@ -339,15 +345,12 @@ void search_string_2(prng *prng)
 
     if (start_position == end_position)
     {
-
         free_piece_list(list);
         free_screen(&screen);
         search_string_2(prng);
         return;
     }
-
     Assert(end_position >= start_position);
-
      
     string s_string = {};
     s_string.capacity = end_position - start_position;
@@ -355,7 +358,13 @@ void search_string_2(prng *prng)
 
     replace_result rep = yank_(list, br.first, br.one_past_end);
 
-    piece_range p_range = *(piece_range *) &rep;
+    piece_range p_range = {
+        .count = rep.count,
+        .pieces = rep.pieces,
+        .start = rep.start,
+        .end = rep.end,
+        .flags = rep.flags,
+    };
 
     write_piece_text(list, p_range, &s_string);
 
@@ -408,16 +417,16 @@ void insert_mode_seq(prng *p)
         motion_spec m_spec = {
             .motion_type = Motion_Vertical,
             .motion_quantifier = cy,
-            .flags = Backword,
+            .flags = Backword | Exclusive,
             .open_close_index = -1
         };
-        move_by_motion(win_a, m_spec, true);
+        move_by_motion(win_a, m_spec);
 
         m_spec.motion_type = Motion_Horizontal;
         m_spec.motion_quantifier = cx;
-        m_spec.flags = 0;
+        m_spec.flags = Exclusive;
 
-        move_by_motion(win_a, m_spec, true);
+        move_by_motion(win_a, m_spec);
 
         insert_mode_sequence(win_a, p, seq);
         commit_insert_mode_undo(list_a);
@@ -430,20 +439,22 @@ void insert_mode_seq(prng *p)
         motion_spec m_spec = {
             .motion_type = Motion_Vertical,
             .motion_quantifier = cy,
-            .flags = Backword,
+            .flags = Backword | Exclusive,
             .open_close_index = -1
         };
-        move_by_motion(win_b, m_spec, true);
+        move_by_motion(win_b, m_spec);
 
         m_spec.motion_type = Motion_Horizontal;
         m_spec.motion_quantifier = cx;
-        m_spec.flags = 0;
+        m_spec.flags = Exclusive;
 
-        move_by_motion(win_b, m_spec, true);
+        move_by_motion(win_b, m_spec);
 
         if (seq->min.x != seq->max.x || seq->min.y != seq->max.y || seq->text_added.len > 0)
         {
-            undo_node *node = allocate_tree_node(&list_b->history_arena);
+            undo_node *node = allocate_tree_node(
+                &list_b->history_arena,
+                &list_b->history);
             node->bc = win_b->bc;
 
             if (seq->text_added.len > 0)

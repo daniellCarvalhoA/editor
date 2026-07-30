@@ -1,87 +1,4 @@
-
- //static gen_buffer_position get_cursor_from_motion(
-     //window *win,
-     //motion_spec m_spec)
- //{
-     //gen_buffer_position result = {};
-     //switch (m_spec.edit_motion)
-     //{
-         //case Up:
-         //{
-             //result.y = saturating_sub(result.y, m_spec.quantifier);
-         //} break;
- //
-         //case Down:
-         //{
-             //result.y = win->bc.y + m_spec.quantifier;
-         //} break;
- //
-         //case Left:
-         //{
-             //result.y = win->bc.y;
-             //result.x = saturating_sub(win->bc.x, m_spec.quantifier);
-         //} break;
- //
-         //case Right:
-         //{
-             //result.y = win->bc.y;
-             //result.x = win->bc.x + m_spec.quantifier;
-         //} break;
- //
-         //case Absolute:
-         //{
-             //result.y = m_spec.quantifier;
-         //} break;
- //
-         //case Dollar:
-         //{
-             //u32 quantifier = m_spec.quantifier;
-             //if (quantifier > 0)
-             //{
-                 //--quantifier;
-             //}
- //
-             //result.y = win->bc.y + quantifier;
-             //result.x = UINT32_MAX;
- //
-         //} break;
- //
-         //case Underscore:
-         //{
-             //result.type = NotMatch;
-             //result.match_str = (u8 *) " ";
-             //result.match_str_len = 1;
-             //result.y = win->bc.y;
-             //result.x = 0;
-         //} break;
- //
-         //case Zero:
-         //{
-             //result.y = win->bc.y;
-             //result.x = 0;
-         //} break;
- //
-         //case Search:
-         //{
-             //result.y = win->bc.y;
-             //result.x = win->bc.x;
-             //result.type          = Match;
-             //result.match_str     = m_spec.match_str;
-             //result.match_str_len = m_spec.match_str_len;
-         //} break;
- //
-         //default: 
-         //{
-         //} break;
-     //}
-     //return result;
- //}
-
-static inline u32 clamp_to_length(
-    piece_list *list,
-    const u32 cy,
-    const u32 cx,
-    b32 exclusive)
+static inline u32 clamp_to_length(piece_list *list, const u32 cy, const u32 cx, b32 exclusive)
 {
     u32 result = cx;
     u32 line_len = get_line_len_(&list->iter, cy);
@@ -96,7 +13,7 @@ static inline u32 clamp_to_length(
     return result;
 }
 
-static void move_by_motion(window *win, motion_spec m_spec, b32 exclusive)
+static void move_by_motion(window *win, motion_spec m_spec) 
 {
     u32 quantifier = Maximum(1, m_spec.motion_quantifier);
     switch (m_spec.motion_type)
@@ -117,7 +34,7 @@ static void move_by_motion(window *win, motion_spec m_spec, b32 exclusive)
              {
                  win->bc.y = saturating_sub(win->bc.y, quantifier);
              }
-             win->bc.x = clamp_to_length(win->buffer, win->bc.y, win->dc.x, exclusive);
+             win->bc.x = clamp_to_length(win->buffer, win->bc.y, win->dc.x, true); 
          } break;
  
  
@@ -129,7 +46,11 @@ static void move_by_motion(window *win, motion_spec m_spec, b32 exclusive)
              }
              else
              {
-                 win->dc.x = win->bc.x = clamp_to_length(win->buffer, win->bc.y, win->bc.x + quantifier, exclusive);
+                 win->dc.x = win->bc.x = clamp_to_length(
+                    win->buffer,
+                    win->bc.y,
+                    win->bc.x + quantifier,
+                    (m_spec.flags & Inclusive) == 0);
              }
          } break;
  
@@ -146,7 +67,7 @@ static void move_by_motion(window *win, motion_spec m_spec, b32 exclusive)
              }
  
              win->bc.y = clamped_add(win->bc.y, quantifier, win->buffer->lcnt);
-             win->dc.x = win->bc.x = clamp_to_length(win->buffer, win->bc.y, UINT32_MAX, exclusive);
+             win->dc.x = win->bc.x = clamp_to_length(win->buffer, win->bc.y, UINT32_MAX, (m_spec.flags & Inclusive) == 0);
          } break;
  
          case Zero:
@@ -216,7 +137,6 @@ static void move_by_motion(window *win, motion_spec m_spec, b32 exclusive)
      }
 }
 
-
 static win_range get_motion_range(window *win, motion_spec m_spec)
 {
     win_range result = {};
@@ -265,16 +185,6 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
         // Make this vertical;
         case Absolute:
         {
-            // str s = {};
-            // if (quantifier < win->bc.y)
-            // {
-            //     result = get_motion_range(win, Motion_Vertical, win->bc.y - quantifier, s, flags, - 1);
-            // }
-            // else if (quantifier > win->bc.y)
-            // {
-            //     result = 
-            //         get_motion_range(win, Motion_Vertical, quantifier - win->bc.y, s, flags | Backword, - 1);
-            // }
         } break;
 
         case Dollar:
@@ -287,7 +197,6 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
 
         case Zero:
         {
-            // u32 quantifier = m_spec.motion_quantifier;
             result.first.y = win->bc.y;
             result.first.x = 0;
             result.one_past_end = win->bc;
@@ -295,11 +204,10 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
 
         case Motion_Search:
         {
-            u32 quantifier = m_spec.motion_quantifier;
+            u32 quantifier = Maximum(1, m_spec.motion_quantifier);
             if (m_spec.flags & Range)
             {
-                Assert(m_spec.open_close_index >= 0 && 
-                       m_spec.open_close_index < (i32) ArrayCount(open_close_pairs));
+                Assert(m_spec.open_close_index >= 0 && m_spec.open_close_index < (i32) ArrayCount(open_close_pairs));
 
                 char_pair pair = open_close_pairs[m_spec.open_close_index];
 
@@ -308,9 +216,6 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
                 if (m_spec.flags & Exclusive)
                 {
                     result.first.x++;
-                    if (result.one_past_end.x == 0)
-                    {
-                    }
                 }
                 else
                 {

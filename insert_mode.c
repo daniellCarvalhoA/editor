@@ -4,7 +4,10 @@ static void commit_insert_mode_undo(piece_list *list)
     insert_mode *state = &list->i_state;
     if ((state->del_count > 0) || (state->ins_count))
     {
-        undo_memory_header *header = allocate_undo_memory_block(&list->history, &list->history_arena, state->del_count);
+        undo_memory_header *header = allocate_undo_memory_block(
+            &list->history,
+            &list->history_arena,
+            state->del_count);
 
         header->abs_idx   = state->abs_idx;
         header->ins_count = state->ins_count;
@@ -21,13 +24,16 @@ static void commit_insert_mode_undo(piece_list *list)
 
         if (list->staged)
         {
+            // TODO: Try to merge if possible;
             LIST_INSERT(list->staged->data, header);
             insert_node(&list->history, list->staged);
             list->staged = 0;
         }
         else
         {
-            undo_node *new_node = allocate_tree_node(&list->history_arena);
+            undo_node *new_node = allocate_tree_node(
+                &list->history_arena,
+                &list->history);
             new_node->data = header;
             new_node->bc.x = state->cx;
             new_node->bc.y = state->cy;
@@ -50,14 +56,14 @@ static void normal_mode(window *win)
     motion_spec m_spec = {
         .motion_type = Motion_Horizontal,
         .motion_quantifier = 1,
-        .flags = Backword,
+        .flags = Backword | Exclusive,
         .open_close_index = -1,
     };
 
-    move_by_motion(win, m_spec, true);
+    move_by_motion(win, m_spec);
 }
 
-static void insert_mode_insert(window *win, str s) //, state_result *s_result) 
+static void insert_mode_insert(window *win, str s)
 {
     piece_list *list   = win->buffer;
     list->changed_since_last_search = true;
@@ -93,8 +99,10 @@ static void insert_mode_insert(window *win, str s) //, state_result *s_result)
                     state->ins_count += 2;
                     state->del_count = 1;
 
-                    list_piece *lp = PushStruct(&state->insert_mode_arena, list_piece, NoClear());
-
+                    list_piece *lp = PushStruct(
+                        &state->insert_mode_arena,
+                        list_piece,
+                        NoClear());
                     lp->piece = *curr_piece;
                     INIT_LIST_HEAD(&lp->list);
                     list_add(&lp->list, &state->piece_head);
@@ -152,14 +160,14 @@ static void insert_mode_insert(window *win, str s) //, state_result *s_result)
     }
 
     list->changed        = true;
-    list->top_changed    = win->bc.y;
-    list->lines_inserted = lines_inserted;
-    list->bot_changed    = win->bc.y + 1;
+    // list->top_changed    = win->bc.y;
+    // list->lines_inserted = lines_inserted;
+    // list->bot_changed    = win->bc.y + 1;
     list->size += s.len;
+    list->lcnt += lines_inserted;
 
     if (lines_inserted)
     {
-        list->lcnt++;
         win->dc.x = 0;
         win->bc.x = 0;
         win->dc.y = win->bc.y + 1;
@@ -189,7 +197,6 @@ static void insert_mode_delete(window *win)
     u32 del_size = position(&last_iter) - position(&iter);
 
     segmented_node *node = iter.node;
-    // u32 num_lines_deleted = get_char(&iter) == '\n';
 
     switch (state->state)
     {
@@ -211,7 +218,6 @@ static void insert_mode_delete(window *win)
             INIT_LIST_HEAD(&lp->list);
             list_add(&lp->list, &list->i_state.piece_head);
 
-            // state->del_count++;
             state->del_count = 1;
 
             if (iter.pos_in_piece == 0)
@@ -308,13 +314,10 @@ static void insert_mode_delete(window *win)
                 Assert(curr_piece->size > 1);
 
                 curr_piece->size -= del_size;
-                // curr_piece->lcnt -= num_lines_deleted;
 
                 node->size -= del_size;
-                // node->lcnt-= num_lines_deleted;
             }
             list->append.text_len -= del_size;
-            // list->append.num_lines -= num_lines_deleted;
         } break;
 
         case Deleted:
@@ -344,10 +347,7 @@ static void insert_mode_delete(window *win)
                     else
                     {
                         curr_piece->size -= del_size;
-                        // curr_piece->lcnt -= num_lines_deleted;
-
                         node->size -= del_size;
-                        // node->lcnt -= num_lines_deleted;
                     }
                     state->abs_idx = iter.abs_idx;
                 }
@@ -376,10 +376,7 @@ static void insert_mode_delete(window *win)
                     else
                     {
                         curr_piece->size -= del_size;
-                        // curr_piece->lcnt -= num_lines_deleted;
-
                         node->size -= del_size;
-                        // node->lcnt -= num_lines_deleted;
                     }
                     state->abs_idx = iter.abs_idx;
                 }
@@ -404,21 +401,16 @@ static void insert_mode_delete(window *win)
                 }
 
                 curr_piece->size -= del_size;
-                // curr_piece->lcnt -= num_lines_deleted;
                 node->size -= del_size;
-                // node->lcnt -= num_lines_deleted;
             }
         } break;
     }
     reset_cursor_(&list->iter);
 
     list->changed = true;
-    // list->top_changed   = win->bc.y - num_lines_deleted;
-    // list->lines_deleted = num_lines_deleted;
     list->bot_changed   = win->bc.y + 1;
 
     list->size -= del_size;
-    // list->lcnt -= num_lines_deleted;
 
     win->dc.x = win->bc.x - 1;
     win->bc.x = win->dc.x;

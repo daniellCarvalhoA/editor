@@ -1,6 +1,5 @@
 #include <utf8proc.h>
 
-
 typedef struct 
 {
     b32 no_errors;
@@ -18,12 +17,6 @@ typedef struct
     void *base;
     u64 size;
 } platform_scatter_gather_vector;
-
-// typedef struct
-// {
-//     i32 flags;
-// } platform_scatter_gather_flags;
-
 
 typedef struct platform_file_group 
 {

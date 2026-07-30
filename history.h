@@ -1,12 +1,16 @@
 
 typedef struct undo_memory_header
 {
+    union
+    {
+        struct undo_memory_header *next;
+        u32 count;
+    };
     u16 abs_idx;
     u16 ins_count;
     u16 del_count;
-    u16 ref_count; // NOTE: UNUSED
+    u16 ref_count; 
     // May put the next pointer as a footer in the data
-    struct undo_memory_header *next;
 } undo_memory_header;
 
 typedef struct undo_memory_block
@@ -32,6 +36,7 @@ typedef struct history
 {
     undo_node *root;
     undo_node *curr_node;
+    undo_node *free_node;
     undo_memory_block *first_block;
 } history;
 

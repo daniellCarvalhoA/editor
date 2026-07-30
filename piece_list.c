@@ -160,7 +160,27 @@ static piece make_piece_from_char(piece_list *list, char c)
     return result;
 }
 
-// #if 0
+static base_iter find_abs_idx(base_iter *last_location, u32 abs_idx)
+{
+    base_iter iter = *last_location;
+    u32 last_abs_idx = iter.abs_idx;
+    // iter.type = Position;
+
+    if (abs_idx < last_abs_idx)
+    {
+        base_advance_by(&iter, last_abs_idx - abs_idx);
+    }
+    else if (abs_idx > last_abs_idx)
+    {
+        base_reverse_by(&iter, abs_idx - last_abs_idx);
+    }
+
+    normalize(&iter);
+    *last_location = iter;
+
+    return iter;
+}
+
 static base_iter find_position(base_iter *last_location, u32 position)  
 {
     base_iter iter = *last_location;
@@ -188,25 +208,8 @@ static buffer_cursor cursor_from_position(base_iter *last_location, u32 position
     base_iter iter = find_position(last_location, position);
     result.y = line_number(&iter);
 
-    // for (;;)
-    // {
-    //     if (base_prev_cell(&iter))
-    //     {
-    //         if (result.y == line_number(&iter))
-    //         {
-    //             result.x++;
-    //         }
-    //     }
-    //     // if (result.y == line_number)
-    // }
-
     while (base_prev_cell(&iter) && result.y == line_number(&iter))
     {
-        // if (result.y > line_number(&iter))
-        // {
-        //     result.x--;
-        //     break;
-        // }
         result.x++;
     }
     return result;
@@ -1605,7 +1608,28 @@ static void redo(window *win)
     }
 }
 
-static void undo_(window *win)
+// static void replace_from_undo_header(piece_list *buffer, undo_memory_header *header)
+// {
+//     piece *pieces = get_pieces_from_header(header);
+//
+//     // for (u32 i = 0; i < slice_cursor.count; ++i)
+//     // {
+//     //     piece piece = slice_cursor.pieces[i];
+//     //     list->size -= piece.size;
+//     //     list->lcnt -= piece.lcnt;
+//     // }
+//
+//     for (u32 i = 0; i < header->del_count; ++i)
+//     {
+//         piece piece = pieces[i];
+//         list->size += piece.size;
+//         list->lcnt += piece.lcnt;
+//     }
+//
+//     replace(list, start_cursor, end_cursor, pieces, header->del_count);
+// }
+//
+static void undo(window *win)
 {
     piece_list *list = win->buffer;
     undo_node *curr_node = undo_node_pop(&list->history);
@@ -1619,12 +1643,22 @@ static void undo_(window *win)
         undo_memory_header **first_header = &(curr_node)->data;
         undo_memory_header *prev_header = 0;
 
-        for (undo_memory_header *header = *first_header; header; header = header->next)
+        for (undo_memory_header *header = *first_header;
+            header;
+            header = header->next)
         {
-            cursor start_cursor = abs_idx_to_cursor_2(list, header->abs_idx);
-            cursor end_cursor   = abs_idx_to_cursor_2(list, header->abs_idx + header->ins_count);
+            cursor start_cursor = abs_idx_to_cursor_2(
+                list,
+                header->abs_idx);
+            cursor end_cursor   = abs_idx_to_cursor_2(
+                list,
+                header->abs_idx + header->ins_count);
 
-            undo_memory_header *redo_header = allocate_undo_memory_block(&list->history, &list->history_arena, header->ins_count);
+            undo_memory_header *redo_header = 
+                allocate_undo_memory_block(
+                    &list->history,
+                    &list->history_arena,
+                    header->ins_count);
 
             redo_header->ins_count = header->del_count;
             redo_header->del_count = header->ins_count;
@@ -1634,10 +1668,15 @@ static void undo_(window *win)
             slice_cursor slice_cursor = {};
             get_slice_cursor_from_header(&slice_cursor, redo_header);
 
-            copy_range(start_cursor, end_cursor, header->ins_count, &slice_cursor);
+            copy_range(
+                start_cursor,
+                end_cursor,
+                header->ins_count,
+                &slice_cursor);
 
             piece *pieces = get_pieces_from_header(header);
 
+            // This should be done inside replace;
             for (u32 i = 0; i < slice_cursor.count; ++i)
             {
                 piece piece = slice_cursor.pieces[i];
@@ -1652,7 +1691,12 @@ static void undo_(window *win)
                 list->lcnt += piece.lcnt;
             }
 
-            replace(list, start_cursor, end_cursor, pieces, header->del_count);
+            replace(
+                list,
+                start_cursor,
+                end_cursor,
+                pieces,
+                header->del_count);
 
             redo_header->next = prev_header;
             prev_header = redo_header;
@@ -2115,11 +2159,7 @@ static edit_flags replace_range(
 }
 
 
-static replace_result range_replace(
-    piece_list *list,
-    buffer_cursor c0,
-    buffer_cursor c1,
-    piece_range p_range)
+static inline replace_result range_replace(piece_list *list, buffer_cursor c0, buffer_cursor c1, piece_range p_range)
 {
     list->changed_since_last_search = true;
     list->changed = true;
@@ -2150,7 +2190,10 @@ static replace_result range_replace(
     list->size -= num_chars_deleted;
     list->lcnt -= num_lines_deleted;
 
-    undo_memory_header *header = allocate_undo_memory_block(&list->history, &list->history_arena, num_undo_pieces);
+    undo_memory_header *header = allocate_undo_memory_block(
+        &list->history,
+        &list->history_arena,
+        num_undo_pieces);
 
     header->abs_idx   = start.abs_idx;
     header->ins_count = p_range.count + not_boundary_start + not_boundary_end;
@@ -2401,6 +2444,8 @@ static void initialize_piece_list(piece_list *list, u8 *original_text, u32 origi
     list->changed_since_last_search = true;
     list->last_searched_string.len = 0;
     list->last_searched_string.buffer = NULL;
+    list->replaced = false;
+    list->replace_len = 0;
 
     base_init_(list, Position, &list->iter);
     INIT_LIST_HEAD(&list->window_sentinel);
@@ -2469,7 +2514,7 @@ static void write_buffer_to_file(piece_list *list)
 }
 
 // NOTE: THIS IS VERY UNOPTIMISED
-static void search_str(piece_list *list, u32 window_size, str search_string)
+static inline void search_str(piece_list *list, u32 window_size, str search_string)
 {
     Assert(search_string.len > 0);
     u32 current_match_cursor = 0;
@@ -2594,57 +2639,7 @@ start:
             list->matches = realloc(list->matches, sizeof(u32) * list->matches_capacity);
         }
         list->matches[list->num_matches++] = match_position;
-
     }
-
-    // for (segmented_node *node = list->root_sentinel.next;
-    //     node != &list->root_sentinel;
-    //     node = node->next)
-    // {
-    //     u32 piece_cursor = 0;
-    //     for (u32 i = 0; i < node->count; ++i)
-    //     {
-    //         piece *piece = node->pieces + i;
-    //         const buffer *buffer = get_buffer(list, piece->type);
-    //         u32 offset = buffer->lines[piece->off.row] + piece->off.col;
-    //         u8 *piece_text_start = buffer->text + offset;
-    //
-    //         while (piece_cursor < piece->size)
-    //         {
-    //             u8 *text = text_piece_start + piece_cursor;
-    //
-    //             if (in_match)
-    //             {
-    //                 Assert(current_match_cursor > 0);
-    //                 u32 remaining_text_size = search_string.len - current_match_cursor;
-    //                 u32 test_size = Minimum(remaining_text_size, piece->size - piece_cursor);
-    //
-    //                 if (!memcmp(search_string.buffer + current_match_cursor, text, test_size))
-    //                 {
-    //                     if (remaining_text_size <= piece->size - piece_cursor)
-    //                     {
-    //                         // found match.
-    //                         // record position. 
-    //                         list->match_len = search_string.len;
-    //                         in_match = false;
-    //                     }
-    //                     piece_cursor += remaining_text_size;
-    //                 }
-    //                 else
-    //                 {
-    //                     // Must restart after the start of the current failed match;
-    //                     // This may be in a previous piece or node;
-    //
-    //                 }
-    //             }
-    //             else
-    //             {
-    //
-    //
-    //             }
-    //         }
-    //     }
-    // }
 }
 
 static piece_list *create_buffer(memory_arena *arena, char *filepath)

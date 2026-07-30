@@ -13,6 +13,7 @@ typedef enum
     Render_StatusVisibilityChange = 0x80,
     Render_BufferExchange         = 0x100,
     Render_RedrawBorders          = 0x200,
+    Render_ShowSearchHighlight    = 0x300,
 } render_change;
 
 typedef struct screen

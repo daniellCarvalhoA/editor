@@ -170,10 +170,16 @@ static inline void initialize_undo_history(history *history)
     history->first_block = 0;
 }
 
-static inline undo_node *allocate_tree_node(memory_arena *arena) 
+static inline undo_node *allocate_tree_node(
+    memory_arena *arena,
+    history *history) 
 {
-    undo_node *result = PushStruct(arena, undo_node, default_arena_params());
-    return result;
+    undo_node *new_node;
+    FREELIST_ALLOCATE(
+        new_node,
+        history->free_node, 
+        PushStruct(arena, undo_node, default_arena_params()));
+    return new_node;
 }
 
 static inline void insert_node(history *history, undo_node *node)
@@ -203,7 +209,7 @@ static void insert_at_current(
     undo_memory_header *data,
     buffer_cursor bc)
 {
-    undo_node *tree = allocate_tree_node(history_arena);
+    undo_node *tree = allocate_tree_node(history_arena, history);
     tree->data = data;
     tree->bc = bc;
 

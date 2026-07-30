@@ -6,6 +6,7 @@ typedef enum
     Motion_Horizontal,
     Motion_Word,
     Motion_Search,
+    //Motion_FollowInserted,
     Absolute,
     Dollar,
     Zero,
@@ -16,8 +17,10 @@ typedef enum
 typedef enum
 {
     Exclusive = 0x1,
-    Backword  = 0x2,
-    Range     = 0x4,
+    Inclusive = 0x2,
+    Backword  = 0x4,
+    Range     = 0x8,
+    Follow    = 0x100,
 } motion_flags;
 
 typedef struct
@@ -38,4 +41,4 @@ static inline void reset_motion_spec(motion_spec *spec)
 
 static inline win_range get_motion_range(window *win, motion_spec m_spec);
 static inline win_range get_cursor_range(window *win, motion_spec m_spec, mode edit_mode);
-static void move_by_motion(window *win, motion_spec m_spec, b32 exclusive);
+static void move_by_motion(window *win, motion_spec m_spec); 

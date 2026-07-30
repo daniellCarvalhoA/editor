@@ -95,6 +95,8 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
                 type = item.len - 1;
             }
 
+            // Assert(item.len > 0);
+
             if (item.cell == '\t')
             {
                 Assert(type == U8);
@@ -163,13 +165,22 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
                     }
                 }
 
+#if 1
                 if (current_match < win->buffer->num_matches) 
                 {
                     u32 match_position = win->buffer->matches[current_match];
+                    u32 match_len = win->buffer->match_len;
+                    if (win->buffer->replaced)
+                    {
+                        match_position = match_position - (current_match * match_len) + (current_match * win->buffer->replace_len);
+                        match_len = win->buffer->replace_len;
+                    }
+
+
                     if (position < match_position)
                     {
                     }
-                    else if (position >= match_position && position < match_position + win->buffer->match_len)
+                    else if (position >= match_position && position < match_position + match_len)
                     {
                         *at = Reversed;
                     }
@@ -178,6 +189,7 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
                         current_match++;
                     }
                 }
+#endif
                 u8 *gv_col = get_cell_vcol_(g_line, v_col);
                 *gv_col = 1;
                 

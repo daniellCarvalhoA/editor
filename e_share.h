@@ -45,7 +45,6 @@ typedef uintptr_t umm;
 typedef u8 b8;
 typedef u8 b16;
 
-#include "g_array.h"
 
 #define ArrayCount(array) (sizeof(array) / sizeof((array)[0]))
 
@@ -56,6 +55,9 @@ typedef u8 b16;
 
 #define Assert(expression) if(!(expression))\
   { fprintf(stderr, "Assert failed in: %d of file: %s\n", __LINE__, __FILE__); *(int *)0 = 0; }
+
+#include "g_array.h"
+#include "string.h"
 
 #define TEST(name) 
 
@@ -136,41 +138,13 @@ typedef u8 b16;
 
 #define SET_BIT_TO(x,n,v) ((x) = ((x) & ~(1U << (n))) | (((v) & 1U) << (n)))
 
+
 static u32 str_len(const char *str);
 
 // Remember to implement memcpy, memset, memmove!!!.
 
-typedef struct string
-{
-    u32 len;
-    u32 capacity;
-    u8 *buffer;
-} string;
 
-typedef struct 
-{
-    u32 len;
-    u8 *buffer;
-} str;
 
-static inline str from_string(string s)
-{
-    str result = { .buffer = s.buffer, .len = s.len };
-    return result;
-}
-
-static inline u32 count_lines(str s)
-{
-    u32 result = 0;
-    for (u32 i = 0; i < s.len; ++i)
-    {
-        if (s.buffer[i] == '\n')
-        {
-            result++;
-        }
-    }
-    return result;
-}
 
 static string char_str_to_string(char *str)
 {

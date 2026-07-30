@@ -76,10 +76,10 @@ struct base_iter;
 
 typedef enum
 {
-    Edit_None = 0x0,
-    Edit_Left = 0x1,
+    Edit_None  = 0x0,
+    Edit_Left  = 0x1,
     Edit_Right = 0x2,
-    Edit_Both = 0x4,
+    Edit_Both  = 0x4,
 } edit_flags;
 
 typedef struct
@@ -106,6 +106,7 @@ typedef struct
 typedef struct piece_list
 {
     memory_arena list_arena;
+    memory_arena insert_mode_arena;
     segmented_node root_sentinel;
     segmented_node *first_free_node;
 
@@ -151,6 +152,9 @@ typedef struct piece_list
     u32 current_match;
     u32 matches_capacity;
     u32 *matches;
+
+    b32 replaced;
+    u32 replace_len;
 
 
     // We own this string;

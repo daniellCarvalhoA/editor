@@ -11,7 +11,7 @@ CommonFlags="-DDEBUG -Wall -Werror -g -Wextra -Wno-unused-function -fsanitize=ad
 # -fsanitize=address 
 
 
-gcc $CommonFlags -fPIC -shared  e.c -lutf8proc -o build/e.so
+gcc $CommonFlags -fPIC -shared e.c -lutf8proc -o build/e.so
 rm -f $LOCKFILE
 
 export ASAN_OPTIONS=abort_on_error=1
