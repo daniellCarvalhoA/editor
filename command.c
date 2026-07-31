@@ -23,6 +23,7 @@ typedef enum
     ParseFlags_Open  = 0x4,
     ParseFlags_Search = 0x8,
     ParseFlags_Replace = 0x10,
+    ParseFlags_NoSearchHighlight = 0x20,
 } parse_flags;
 
 typedef struct
@@ -223,6 +224,10 @@ static b32 parse_comm(parse_tree *tree, tokenizer *tokenizer)
             tree->filename.buffer = file_token.text;
             tree->filename.len = file_token.len;
         }
+        else if (token_equals(c_token, (u8 *) "nh", 2))
+        {
+            tree->flags |= ParseFlags_NoSearchHighlight;
+        }
         else
         {
             result = false;
@@ -321,14 +326,28 @@ static b32 process_command(editor_state *state)
         }
         else
         {
-            buffer->last_searched_string.buffer = realloc(buffer->last_searched_string.buffer, sizeof(u8) * buffer->last_searched_string.len);
-            memcpy(buffer->last_searched_string.buffer, p_tree.search_string.buffer, buffer->last_searched_string.len);
+            buffer->last_searched_string.len = buffer->match_len;
+            buffer->last_searched_string.buffer = realloc(
+                buffer->last_searched_string.buffer,
+                sizeof(u8) * buffer->last_searched_string.len);
+            memcpy(
+                buffer->last_searched_string.buffer,
+                p_tree.search_string.buffer,
+                buffer->last_searched_string.len);
 
             if (buffer->num_matches > 0)
             {
-                interacting_window->dc = interacting_window->bc = cursor_from_position(&buffer->iter, buffer->matches[buffer->current_match]);
+                interacting_window->dc = interacting_window->bc = 
+                    cursor_from_position(
+                        &buffer->iter,
+                        buffer->matches[buffer->current_match]);
             }
         }
+    }
+
+    if (p_tree.flags & ParseFlags_NoSearchHighlight)
+    {
+        state->screen.change |= Render_NoShowSearchHighlight;
     }
 
     // clear_buffer(&state->screen.command_window->c_buffer);
@@ -355,6 +374,7 @@ static b32 parse_command(editor_state *state, str input)
             active_window->bc = (struct buffer_cursor) {0};
 
             piece_list *buffer = interacting_window->buffer;
+
             buffer->num_matches = 0;
             buffer->current_match = 0;
             buffer->match_len = 0;
@@ -365,12 +385,15 @@ static b32 parse_command(editor_state *state, str input)
                 Assert(buffer->staged);
                 undo_node *node = buffer->staged;
                 undo_memory_header *head = node->data;
+
                 for (undo_memory_header *header = head;
                     header;
                     header = header->next)
                 {
                     cursor start_cursor = abs_idx_to_cursor_2(buffer, header->abs_idx);
-                    cursor end_cursor   = abs_idx_to_cursor_2(buffer, header->abs_idx + header->ins_count);
+                    cursor end_cursor   = abs_idx_to_cursor_2(
+                        buffer,
+                        header->abs_idx + header->ins_count);
 
                     piece *pieces = get_pieces_from_header(header);
                     for (u32 i = 0; i < header->del_count; ++i)
@@ -379,7 +402,6 @@ static b32 parse_command(editor_state *state, str input)
                         buffer->size = piece.size;
                         buffer->lcnt = piece.lcnt;
                     }
-
                     replace(buffer, start_cursor, end_cursor, pieces, header->del_count);
                 }
 
@@ -390,6 +412,12 @@ static b32 parse_command(editor_state *state, str input)
 
                 buffer->replaced = false;
                 buffer->replace_len = 0;
+            }
+
+            if (buffer->last_searched_string.len > 0)
+            {
+                search_str(buffer, 0, buffer->last_searched_string);
+                buffer->match_len = buffer->last_searched_string.len;
             }
             state->searching = false;
 
@@ -439,23 +467,9 @@ static b32 parse_command(editor_state *state, str input)
 
                     buffer->append.text_len -= bytes_deleted;
                     buffer->append.num_lines -= lines_deleted;
+
                     // TODO: Change search by position to search by absolute index, (obtained from buffer->staged);
 
-                    // for (undo_memory_header *header = buffer->staged->data;
-                    //     header;
-                    //     header = header->next)
-                    // {
-                    //     base_iter location = find_abs_idx(&buffer->iter, header->abs_idx);
-                    //     piece *piece = get_piece_(&location);
-                    //     piece->size -= bytes_deleted;
-                    //     piece->lcnt -= lines_deleted;
-                    //
-                    //     location.node->size -= bytes_deleted;
-                    //     location.node->lcnt -= lines_deleted;
-                    //
-                    //     removed_size += buffer->match_len;
-                    //     added_size += tree.replace_string.len;
-                    // }
                     for (u32 i = 0; i < buffer->num_matches; ++i)
                     {
                         // There already is a dummy piece in the 
@@ -516,13 +530,22 @@ static b32 parse_command(editor_state *state, str input)
                         reset_cursor_(&buffer->iter);
                     }
 
-                    if (buffer->num_matches > 0u)
+                    if (buffer->num_matches > 0)
                     {
                         buffer->matches_capacity = 0;
                         buffer->num_matches = 0;
                         buffer->current_match = 0;
                     }
                     search_str(buffer, 0, tree.search_string);
+
+                    if (buffer->num_matches > 0)
+                    {
+                        interacting_window->dc = interacting_window->bc = 
+                            cursor_from_position(
+                                &buffer->iter,
+                                buffer->matches[buffer->current_match]);
+                    }
+
                 }
                 buffer->changed = true;
             }
@@ -555,12 +578,11 @@ static b32 parse_command(editor_state *state, str input)
                 if (tree.flags & ParseFlags_Replace)
                 {
                     buffer->replaced = true;
-                    // if (tree.replace_string.len == 0)
+                    // buffer->last_num_matches = buffer->num_matches;
+                    // buffer->last_match_len = buffer->match_len;
                     if (!buffer->staged)
                     {
                         piece piece = make_piece(buffer, tree.replace_string);
-
-                        // undo_node *node = NULL;
 
                         // Must iterate backwards because otherwise deleting from one position would invalidate the next;
                         undo_memory_header *head_header = NULL;
@@ -644,11 +666,15 @@ static b32 parse_command(editor_state *state, str input)
                 {
                     if (buffer->matches)
                     {
-                        // buffer->matches_capacity = 0;
                         buffer->num_matches = 0;
                         buffer->current_match = 0;
                     }
                     search_str(buffer, 0, tree.search_string);
+
+                    if (buffer->num_matches > 0)
+                    {
+                        interacting_window->bc = interacting_window->dc = cursor_from_position(&buffer->iter, buffer->matches[buffer->current_match]);
+                    }
                 }
                 buffer->changed = true;
             }

@@ -1114,7 +1114,7 @@ static void render_window(window *win, screen *screen, mode edit_mode)
     u16 w_height   = get_height(screen, win);
     u16 w_width    = get_width(screen, win);
 
-    if (win == screen->active_window && win->layout == LeafBuffer)
+    if (((win == screen->active_window) || (win == interacting_window)) && win->layout == LeafBuffer)
     {
         u32 height = (win->flags & WinFlags_StatusLineVisible) ?
             (w_height - 1) :

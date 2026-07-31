@@ -2159,7 +2159,11 @@ static edit_flags replace_range(
 }
 
 
-static inline replace_result range_replace(piece_list *list, buffer_cursor c0, buffer_cursor c1, piece_range p_range)
+static inline replace_result range_replace(
+    piece_list *list,
+    buffer_cursor c0,
+    buffer_cursor c1,
+    piece_range p_range)
 {
     list->changed_since_last_search = true;
     list->changed = true;
@@ -2435,7 +2439,9 @@ static void initialize_piece_list(piece_list *list, u8 *original_text, u32 origi
     list->wrapped = false;
 
     list->match_len = 0;
+    // list->last_match_len = 0;
     list->num_matches = 0;
+    // list->last_num_matches = 0;
     list->first_match_line = 0;
     list->last_match_line = 0;
     list->current_match = 0;

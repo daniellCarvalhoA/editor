@@ -286,7 +286,7 @@ void undo_redo(prng *prng)
     free_screen(&screen);
 }
 
-//TST(search_string)
+TEST(search_string)
 void search_string(prng *prng)
 {
     screen screen = {};

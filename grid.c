@@ -35,6 +35,13 @@ static void fill_command_grid(screen *screen, window *win, grid_view grid)
 
 static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mode)
 {
+    if (((screen->change & Render_NoShowSearchHighlight) == 0) && 
+        (win->buffer->changed) && (win->buffer->last_searched_string.len > 0))
+    {
+        win->buffer->num_matches = 0;
+        win->buffer->current_match = 0;
+        search_str(win->buffer, 0, win->buffer->last_searched_string);
+    }
     window *active_window = screen->active_window;
     base_iter iter;
     b32 not_over = base_init_(win->buffer, LineNumber, &iter);
@@ -51,6 +58,16 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
     win_range range = make_range(visual_cursor, curr_cursor);
 
     u32 current_match = 0;
+
+    u32 top_position = get_position(&iter);
+
+    while (((screen->change & Render_NoShowSearchHighlight) == 0) && 
+           (current_match < win->buffer->num_matches) &&
+           (win->buffer->matches[current_match] < top_position))
+    {
+        current_match++;
+    }
+
     while (not_over && line < win->top_line + height)
     {
         u32 i = 0;
@@ -123,21 +140,6 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
                     }
                 }
 
-                // if (current_match < win->buffer->num_matches) 
-                // {
-                //     u32 match_position = win->buffer->matches[current_match];
-                //     if (position < match_position)
-                //     {
-                //     }
-                //     else if (position >= match_position && position < match_position + win->buffer->match_len)
-                //     {
-                //         memset(at, Reversed, sizeof(attr));
-                //     }
-                //     else
-                //     {
-                //         current_match++;
-                //     }
-                // }
                 u8 *gv_col = get_cell_vcol_(g_line, v_col);
                 *gv_col = tab_length;
                 
@@ -166,7 +168,8 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
                 }
 
 #if 1
-                if (current_match < win->buffer->num_matches) 
+                if (((screen->change & Render_NoShowSearchHighlight) == 0) && 
+                    (current_match < win->buffer->num_matches)) 
                 {
                     u32 match_position = win->buffer->matches[current_match];
                     u32 match_len = win->buffer->match_len;

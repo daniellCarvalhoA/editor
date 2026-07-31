@@ -24,8 +24,15 @@ static void commit_insert_mode_undo(piece_list *list)
 
         if (list->staged)
         {
-            // TODO: Try to merge if possible;
-            LIST_INSERT(list->staged->data, header);
+            if (header->del_count == 0)
+            {
+                // TODO: Not quite sure this works. 
+                list->staged->data->ins_count++;
+            }
+            else
+            {
+                LIST_INSERT(list->staged->data, header);
+            }
             insert_node(&list->history, list->staged);
             list->staged = 0;
         }

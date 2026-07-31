@@ -71,9 +71,32 @@ static parse_result parse_normal(editor_state *editor, str token)
 
             if (buffer->num_matches > 0)
             {
+                editor->screen.change &= ~Render_NoShowSearchHighlight;
                 buffer->current_match = (buffer->current_match + 1) % buffer->num_matches;
                 (*active_window)->bc = (*active_window)->dc = cursor_from_position(&buffer->iter, buffer->matches[buffer->current_match]);
+                // (*active_window)->buffer->changed = true;
             }
+        } break;
+
+        case 'N':
+        {
+            piece_list *buffer = (*active_window)->buffer;
+            if (buffer->changed_since_last_search && (buffer->last_searched_string.len > 0))
+            {
+                buffer->matches_capacity = 0;
+                buffer->num_matches = 0;
+                search_str(buffer, 0, buffer->last_searched_string);
+                buffer->changed_since_last_search = false;
+            }
+
+            if (buffer->num_matches > 0)
+            {
+                editor->screen.change &= ~Render_NoShowSearchHighlight;
+                buffer->current_match = (buffer->current_match + (buffer->num_matches - 1)) % buffer->num_matches;
+                (*active_window)->bc = (*active_window)->dc = cursor_from_position(&buffer->iter, buffer->matches[buffer->current_match]);
+                // (*active_window)->buffer->changed = true;
+            }
+
         } break;
 
         case '/':
@@ -748,12 +771,21 @@ static void edit(editor_state *state)
                 a_spec->m_mod = NoChange;
             }
 
-
             if (a_spec->inserted.len)
             {
                 undo_node *node = change(win, NULL, w_range, a_spec->inserted);
                 node->bc = prev_cursor;
-                insert_node(&win->buffer->history, node);
+                if (win->buffer->staged)
+                {
+                    LIST_INSERT(win->buffer->staged->data, node->data);
+                    insert_node(&win->buffer->history, win->buffer->staged);
+                    win->buffer->staged = 0;
+                }
+                else
+                {
+                    insert_node(&win->buffer->history, node);
+                }
+
                 win->bc = w_range.first;
                 u32 lines_inserted = count_lines(a_spec->inserted);
                 if (lines_inserted)
@@ -877,7 +909,11 @@ static void edit(editor_state *state)
                     } break;
                 }
 
-                replace_result rep = range_replace(win->buffer, range.first, range.one_past_end, p_range);
+                replace_result rep = range_replace(
+                    win->buffer,
+                    range.first,
+                    range.one_past_end,
+                    p_range);
 
                 node->data = rep.undo_header;
 
