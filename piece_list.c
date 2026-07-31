@@ -429,7 +429,11 @@ static buffer_range find_boundary(base_iter *last_location, u8 open, u8 close, b
     return result;
 }
 
-static u32 find_char(base_iter *last_location, str match, u32 count, buffer_cursor cursor)
+static u32 find_char(
+    base_iter *last_location,
+    str match,
+    u32 count,
+    buffer_cursor cursor)
 {
     u32 result = 0;
     base_iter iter = find_cursor(last_location, cursor);

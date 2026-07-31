@@ -13,6 +13,68 @@ static inline u32 clamp_to_length(piece_list *list, const u32 cy, const u32 cx, 
     return result;
 }
 
+
+static inline buffer_cursor find_next_paragraph(window *win, u32 count) 
+{
+    // TODO! Make this work for all types of newline characters;
+    buffer_cursor result = {};
+    base_iter iter = find_line(&win->buffer->iter, win->bc.y + 1);
+    u32 prev_line_pos = get_position(&iter);
+    for (;;)
+    {
+        if (!base_next_line(&iter))
+        {
+            break;
+        }
+
+        u32 curr_line_pos = get_position(&iter);
+        if (prev_line_pos + 1 == curr_line_pos)
+        {
+            count--;
+            if (count == 0)
+            {
+                result.y = line_number(&iter) - 1;
+                result.x = 0;
+                break;
+            }
+        }
+
+        prev_line_pos = curr_line_pos;
+    }
+    return result;
+}
+
+
+static inline buffer_cursor find_prev_paragraph(window *win, u32 count)
+{
+    // TODO! Make this work for all types of newline characters;
+    buffer_cursor result = { .x = UINT32_MAX, .y = UINT32_MAX };
+    base_iter iter = find_line(&win->buffer->iter, win->bc.y);
+    u32 prev_line_pos = get_position(&iter);
+    for (;;)
+    {
+        if (!base_prev_line(&iter))
+        {
+            break;
+        }
+
+        u32 curr_line_pos = get_position(&iter);
+        if (prev_line_pos == curr_line_pos + 1)
+        {
+            count--;
+            if (count == 0)
+            {
+                result.y = line_number(&iter);
+                result.x = 0;
+                break;
+            }
+        }
+        prev_line_pos = curr_line_pos;
+    }
+    return result;
+}
+
+
 static void move_by_motion(window *win, motion_spec m_spec) 
 {
     u32 quantifier = Maximum(1, m_spec.motion_quantifier);
@@ -26,7 +88,7 @@ static void move_by_motion(window *win, motion_spec m_spec)
  
          case Motion_Vertical:
          {
-             if (m_spec.flags & Backword)
+             if (m_spec.flags & Backwards)
              {
                  win->bc.y = clamped_add(win->bc.y, quantifier, win->buffer->lcnt);
              }
@@ -40,7 +102,7 @@ static void move_by_motion(window *win, motion_spec m_spec)
  
          case Motion_Horizontal:
          {
-             if (m_spec.flags & Backword)
+             if (m_spec.flags & Backwards)
              {
                  win->dc.x = win->bc.x = saturating_sub(win->bc.x, quantifier);
              }
@@ -102,7 +164,7 @@ static void move_by_motion(window *win, motion_spec m_spec)
                 win->bc = win->dc = range.one_past_end;
                 win->vc = range.first;
              }
-             else if (m_spec.flags & Backword)
+             else if (m_spec.flags & Backwards)
              {
                  str match_str = { .buffer = m_spec.match_str, .len = m_spec.match_str_len };
                  win->dc.x = win->bc.x = find_char_back(&win->buffer->iter, match_str, quantifier, win->bc);
@@ -125,13 +187,69 @@ static void move_by_motion(window *win, motion_spec m_spec)
 
          case Motion_Word:
          {
-             if (m_spec.flags & Backword)
+             if (m_spec.flags & Backwards)
              {
                  win->dc = win->bc = find_word_back(&win->buffer->iter, quantifier, win->bc);
              }
              else
              {
                  win->dc = win->bc = find_word(&win->buffer->iter, quantifier, win->bc);
+             }
+         } break;
+
+         case Motion_Paragraph:
+         {
+             if (m_spec.flags & Backwards)
+             {
+                 base_iter iter = find_line(&win->buffer->iter, win->bc.y);
+                 u32 prev_line_pos = get_position(&iter);
+                 for (;;)
+                 {
+                     if (!base_prev_line(&iter))
+                     {
+                         break;
+                     }
+
+                     u32 curr_line_pos = get_position(&iter);
+                     if (prev_line_pos == curr_line_pos + 1)
+                     {
+                         quantifier--;
+                         if (quantifier == 0)
+                         {
+                             win->bc.y = win->dc.y = line_number(&iter);
+                             win->bc.x = win->dc.x = 0;
+                             break;
+                         }
+                     }
+                     prev_line_pos = curr_line_pos;
+                 }
+             }
+             else
+             {
+
+                 base_iter iter = find_line(&win->buffer->iter, win->bc.y + 1);
+                 u32 prev_line_pos = get_position(&iter);
+                 for (;;)
+                 {
+                     if (!base_next_line(&iter))
+                     {
+                         break;
+                     }
+
+                     u32 curr_line_pos = get_position(&iter);
+                     if (prev_line_pos + 1 == curr_line_pos)
+                     {
+                         quantifier--;
+                         if (quantifier == 0)
+                         {
+                             win->bc.y = win->dc.y = line_number(&iter) - 1;
+                             win->bc.x = win->dc.x = 0;
+                             break;
+                         }
+                     }
+
+                     prev_line_pos = curr_line_pos;
+                 }
              }
          } break;
      }
@@ -147,7 +265,7 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
             u32 quantifier = m_spec.motion_quantifier + 1;
             result.first.x = 0;
             result.one_past_end.x = 0;
-            if (m_spec.flags & Backword)
+            if (m_spec.flags & Backwards)
             {
                 result.first.y = win->bc.y;
                 result.one_past_end.y = clamped_add(win->bc.y, quantifier, win->buffer->lcnt);
@@ -170,7 +288,7 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
         {
             u32 quantifier = Maximum(1, m_spec.motion_quantifier);
             result.first.y = result.one_past_end.y = win->bc.y;
-            if (m_spec.flags & Backword)
+            if (m_spec.flags & Backwards)
             {
                 result.first.x = saturating_sub(win->bc.x, quantifier);
                 result.one_past_end.x = win->bc.x;
@@ -249,7 +367,12 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
         case Motion_Word:
         {
             u32 quantifier = m_spec.motion_quantifier;
-            if (m_spec.flags & Backword)
+            if (m_spec.flags & Range)
+            {
+                result.first = find_word_back(&win->buffer->iter, quantifier, win->bc);
+                result.one_past_end = find_word(&win->buffer->iter, quantifier, win->bc);
+            }
+            else if (m_spec.flags & Backwards)
             {
                 result.first = find_word_back(&win->buffer->iter, quantifier, win->bc);
                 result.one_past_end = win->bc;
@@ -258,6 +381,26 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
             {
                 result.first = win->bc;
                 result.one_past_end = find_word(&win->buffer->iter, quantifier, win->bc);
+            }
+        } break;
+
+        case Motion_Paragraph:
+        {
+            u32 quantifier = m_spec.motion_quantifier;
+            if (m_spec.flags & Range)
+            {
+                result.first = find_prev_paragraph(win, quantifier);
+                result.one_past_end = find_next_paragraph(win, quantifier);
+            }
+            else if (m_spec.flags & Backwards)
+            {
+                result.one_past_end = (struct buffer_cursor) {. x = 0, .y = win->bc.y + 1 };
+                result.first = find_prev_paragraph(win, quantifier);
+            }
+            else
+            {
+                result.first = (struct buffer_cursor) { .x = 0, .y = win->bc.y };
+                result.one_past_end = find_next_paragraph(win, quantifier);
             }
         } break;
 
@@ -331,4 +474,3 @@ static inline win_range get_cursor_range(window *win, motion_spec m_spec, mode e
     }
     return result;
 }
-

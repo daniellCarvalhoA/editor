@@ -6,6 +6,7 @@ typedef enum
     Motion_Horizontal,
     Motion_Word,
     Motion_Search,
+    Motion_Paragraph,
     //Motion_FollowInserted,
     Absolute,
     Dollar,
@@ -18,7 +19,7 @@ typedef enum
 {
     Exclusive = 0x1,
     Inclusive = 0x2,
-    Backword  = 0x4,
+    Backwards = 0x4,
     Range     = 0x8,
     Follow    = 0x100,
 } motion_flags;

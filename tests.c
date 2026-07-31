@@ -417,7 +417,7 @@ void insert_mode_seq(prng *p)
         motion_spec m_spec = {
             .motion_type = Motion_Vertical,
             .motion_quantifier = cy,
-            .flags = Backword | Exclusive,
+            .flags = Backwards | Exclusive,
             .open_close_index = -1
         };
         move_by_motion(win_a, m_spec);
@@ -439,7 +439,7 @@ void insert_mode_seq(prng *p)
         motion_spec m_spec = {
             .motion_type = Motion_Vertical,
             .motion_quantifier = cy,
-            .flags = Backword | Exclusive,
+            .flags = Backwards | Exclusive,
             .open_close_index = -1
         };
         move_by_motion(win_b, m_spec);

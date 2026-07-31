@@ -63,7 +63,7 @@ static void normal_mode(window *win)
     motion_spec m_spec = {
         .motion_type = Motion_Horizontal,
         .motion_quantifier = 1,
-        .flags = Backword | Exclusive,
+        .flags = Backwards | Exclusive,
         .open_close_index = -1,
     };
 
