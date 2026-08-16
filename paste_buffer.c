@@ -7,23 +7,24 @@ static inline b32 is_empty(paste_buffer *buffer)
 static inline void free_paste_buffer(paste_buffer *buffer)
 {
     history *history = &buffer->buffer->history;
+    memory_arena *history_arena = &buffer->buffer->history_arena;
     if (buffer->count)
     {
         Assert(buffer->pieces);
         free_memory_block(
+            history_arena,
             history,
             (void *) buffer->pieces,
             buffer->count * sizeof(piece));
     }
     else
     {
-        free_undo_memory_block(history, buffer->header);
+        free_undo_memory_block(history_arena, history, buffer->header);
     }
     buffer->buffer = 0;
     buffer->start = 0;
     buffer->end = 0;
     buffer->count = 0;
-    buffer->flags = 0;
     buffer->pieces = 0;
     buffer->type = 0;
 }

@@ -20,21 +20,21 @@ static void flush_buffer(screen *screen)
     screen->cursor = 0;
 }
 
-static void write_string(screen *screen, u8 *s, u32 len) 
+static void write_string(screen *screen, str s) 
 {
-    if (screen->cursor + len > ArrayCount(screen->buffer))
+    if (screen->cursor + s.len > ArrayCount(screen->buffer))
     {
         flush_buffer(screen);
     }
-    memcpy(screen->buffer + screen->cursor, s, len);
-    screen->cursor += len;
+    memcpy(screen->buffer + screen->cursor, s.buffer, s.len);
+    screen->cursor += s.len;
 
 }
 
 static void reset_color(screen *screen)
 {
-    char reset_string[] = "\x1b[0m";
-    write_string(screen, (u8 *) reset_string, sizeof(reset_string) - 1);
+    // char reset_string[] = "\x1b[0m";
+    write_string(screen, STR_LIT("\x1b[0m")); //(u8 *) reset_string, sizeof(reset_string) - 1);
 }
 
 static void set_color(screen *screen, u32 color)

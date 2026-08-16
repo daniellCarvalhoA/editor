@@ -178,8 +178,12 @@ static inline b32 base_prev_line(base_iter *iter)
     return true;
 }
 
+
 static inline b32 base_advance_by(base_iter *iter, u32 count)
 {
+    iter->pos_in_piece = 0;
+    iter->line_in_piece = 0;
+
     if (get_position(iter) == iter->list->size)
     {
         return false;
@@ -188,11 +192,12 @@ static inline b32 base_advance_by(base_iter *iter, u32 count)
     while (count > iter->node->count - iter->piece_idx)
     {
         count -= iter->node->count - iter->piece_idx;
-        iter->abs_idx   += iter->node->count;
+        iter->abs_idx   += iter->node->count - iter->piece_idx;
+
         iter->node_pos  += iter->node->size;
         iter->node_line += iter->node->lcnt;
         iter->node = iter->node->next;
-        iter->piece_idx = 0;
+        iter->piece_idx = iter->piece_pos = iter->piece_line = 0;
     }
 
     while (count > 0)
@@ -204,8 +209,6 @@ static inline b32 base_advance_by(base_iter *iter, u32 count)
         iter->abs_idx++;
     }
 
-    iter->pos_in_piece = 0;
-    iter->line_in_piece = 0;
 
     return true;
 }
@@ -392,7 +395,7 @@ static inline cell_item base_next_cell(base_iter *iter)
     return result;
 }
 
-static inline b32 base_advance_pos_by(base_iter *iter, u32 count)
+static b32 base_advance_pos_by(base_iter *iter, u32 count)
 {
     iter->type &= ~LineNumber;
     if (position(iter) >= iter->list->size)
@@ -731,7 +734,7 @@ static inline b32 base_next_pos(base_iter *iter)
     return true;
 }
 
-static inline b32 base_advance_pos_rev_by(base_iter *iter, u32 count)
+static b32 base_advance_pos_rev_by(base_iter *iter, u32 count)
 {
     iter->type &= ~LineNumber;
     if (position(iter) == 0)
@@ -867,10 +870,7 @@ static inline str get_char_utf8(base_iter *iter)
     return result;
 }
 
-static inline b32 base_next_pred(
-    base_iter *iter,
-    search_pred pred,
-    str needle)
+static inline b32 base_next_pred(base_iter *iter, search_pred pred, str needle)
 {
     str s = get_char_utf8(iter);
 

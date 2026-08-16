@@ -1,4 +1,5 @@
 #include "e.h"
+#include "string.c"
 #include "prng.c"
 
 // TODO:
@@ -14,9 +15,11 @@ u32 num_insert_pieces = 32;
 #define MAX_STRING_LEN 40
 #define MAX_ORIGINAL_STRING_LEN 40
 #define MAX_INSERT_MODE_SEQ 10
-#define MAX_UNDO_REDO_SEQ 10
+#define MAX_COMPOUND_UNDO_SEQ 8
+#define MAX_UNDO_REDO_SEQ 4
 #define MAX_SEQ 10
 #define MAX_LINE_LEN 40
+#define DEBUG_UNDO_RECORDS_SIZE Megabytes(1)
 
 typedef win_cursor test_cursor; 
 
@@ -39,6 +42,7 @@ static win_cursor rand_cursor(prng *prng, u32 max_x, u32 max_y)
 #include "piece_list.c"
 #include "grid.c"
 #include "window.c"
+#include "undo.c"
 #include "screen.c"
 #include "command.c"
 #include "paste_buffer.c"
@@ -46,6 +50,24 @@ static win_cursor rand_cursor(prng *prng, u32 max_x, u32 max_y)
 #include "normal.c"
 #include "normal_test.c"
 #include "insert_mode.c"
+
+static buffer_cursor rand_buffer_cursor_clamped(piece_list *list, prng *prng, buffer_cursor max)
+{
+    u32 y = rand_range_u32_inclusive(prng, 0, max.y);
+    u32 x;
+    if (y == max.y)
+    {
+        x = rand_range_u32_inclusive(prng, 0, max.x);
+    }
+    else
+    {
+        x = rand_range_u32_inclusive(prng, 0, MAX_LINE_LEN);
+        x = clamp_to_length(list, y, x, false);
+    }
+
+    return (struct buffer_cursor) { .y = y, .x = x };
+
+}
 
 static editor_state *rand_editor(prng *prng)
 {
@@ -86,13 +108,50 @@ static void free_insert_seq_result(insert_seq_result *seq)
     free(seq);
 }
 
-static void clear_seq(insert_seq_result *seq)
+static inline void clear_seq(insert_seq_result *seq)
 {
     seq->min.x = seq->max.x = seq->min.y = seq->max.y = 0;
     seq->text_added.len = 0;
 }
 
-static void insert_mode_sequence(window *win, prng *prng, insert_seq_result *seq)
+static inline void insert_insert_mode(window *win, string text)
+{
+    for (u32 j = 0; j < text.len; ++j)
+    {
+        str s = { .buffer = (u8 *) text.buffer + j, .len = 1 };
+        insert_mode_insert(win, s);
+    }
+}
+
+// static inline void insert_insert_mode_(window *win, string text)
+// {
+//     for (u32 j = 0; j < text.len; ++j)
+//     {
+//         str s = { .buffer = (u8 *) text.buffer + j, .len = 1 };
+//         insert_mode_insert_(win, s);
+//     }
+// }
+
+static inline void delete_insert_mode(window *win, win_cursor start)
+{
+    while (win->bc.x > start.x)
+    {
+        insert_mode_delete(win);
+    }
+}
+#if 0
+static inline void delete_insert_mode_(window *win, win_cursor start)
+{
+    while (compare(win->bc, start) == GreaterThan)
+    {
+        insert_mode_delete_(win);
+    }
+}
+
+static void insert_mode_sequence_2(
+    window *win,
+    prng *prng,
+    insert_seq_result *seq)
 {
     seq->min.x = win->buffer->size;
     seq->min.y = win->buffer->lcnt;
@@ -106,11 +165,7 @@ static void insert_mode_sequence(window *win, prng *prng, insert_seq_result *seq
             INIT_STACK_STRING(text, MAX_STRING_LEN);
             rand_ascii_string(&text, prng, 1, MAX_STRING_LEN);
             push_string(&seq->text_added, from_string(text));
-            for (u32 j = 0; j < text.len; ++j)
-            {
-                str s = { .buffer = (u8 *) text.buffer + j, .len = 1 };
-                insert_mode_insert(win, s);
-            }
+            insert_insert_mode(win, text);
         }
         else
         {
@@ -130,10 +185,51 @@ static void insert_mode_sequence(window *win, prng *prng, insert_seq_result *seq
 
             win_cursor curr_min = minimum(seq->min, begin);
             seq->min = minimum(seq->min, curr_min);
-            for (; win->bc.x > begin.x;)
+            delete_insert_mode_(win, begin);
+        }
+    }
+    seq->min = minimum(seq->min, seq->max);
+}
+#endif
+
+static void insert_mode_sequence(
+    window *win,
+    prng *prng,
+    insert_seq_result *seq)
+{
+    seq->min.x = win->buffer->size;
+    seq->min.y = win->buffer->lcnt;
+    seq->max = win->bc;
+    u32 seq_size = rand_range_u32_inclusive(prng, 1, MAX_INSERT_MODE_SEQ);
+
+    for (u32 i = 0; i < seq_size; ++i)
+    {
+        if (rand_b32(prng))
+        {
+            INIT_STACK_STRING(text, MAX_STRING_LEN);
+            rand_ascii_string(&text, prng, 1, MAX_STRING_LEN);
+            push_string(&seq->text_added, from_string(text));
+            insert_insert_mode(win, text);
+        }
+        else
+        {
+            u32 begin_x = rand_range_u32_inclusive(prng, 0, win->bc.x);
+            u32 begin_y = win->bc.y;
+
+            win_cursor begin = { .x = begin_x, .y = begin_y };
+            u32 delete_amount = win->bc.x - begin.x;
+            if (seq->text_added.len > delete_amount)
             {
-                insert_mode_delete(win);
+                seq->text_added.len -= delete_amount;
             }
+            else
+            {
+                seq->text_added.len = 0;
+            }
+
+            win_cursor curr_min = minimum(seq->min, begin);
+            seq->min = minimum(seq->min, curr_min);
+            delete_insert_mode(win, begin);
         }
     }
     seq->min = minimum(seq->min, seq->max);
@@ -152,7 +248,7 @@ static void free_editor(editor_state *state)
     free_arena(&state->arena);
 }
 
-TEST(replace_sound)
+// TST(replace_sound)
 void replace_sound(prng *prng)
 {
     piece_list *list = rand_list(prng);
@@ -160,13 +256,43 @@ void replace_sound(prng *prng)
     free_piece_list(list);
 }
 
+TEST(replace_sound_2)
+void replace_sound_2(prng *prng)
+{
+    piece_list *list = rand_list_2(prng);
+    list_invariants(list);
+    free_piece_list(list);
+}
+
+
+// // TST(replace_against_model)
+// void replace_against_model(prng *p)
+// {
+//     prng clone = clone_prng(p);
+//
+//     model *m = rand_model(p);
+//     piece_list *list = rand_list(&clone);
+//
+//     Assert(list->size == m->s.len);
+//
+//     u8 *buf = malloc(sizeof(u8) * list->size);
+//
+//     write_to_buffer(list, buf, list->size);
+//
+//     Assert(strncmp((const char *) buf, (const char *) m->s.buffer, list->size) == 0);
+//
+//     free(buf);
+//     free_piece_list(list);
+//     free_arena(&m->arena);
+// }
+
 TEST(replace_against_model)
 void replace_against_model(prng *p)
 {
     prng clone = clone_prng(p);
 
     model *m = rand_model(p);
-    piece_list *list = rand_list(&clone);
+    piece_list *list = rand_list_2(&clone);
 
     Assert(list->size == m->s.len);
 
@@ -181,17 +307,76 @@ void replace_against_model(prng *p)
     free_arena(&m->arena);
 }
 
+TEST(undo_redo_test)
+void undo_redo_test(prng *prng)
+{
+    screen screen = {};
+    initialize_screen(&screen);
+    window *win = create_window(&screen, LeafBuffer, 0);
+    piece_list *list = rand_list_2(prng);
+    map_buffer_to_window(list, win);
+
+    u32 num_reversible_edits = rand_range_u32_inclusive(prng, 1, MAX_UNDO_REDO_SEQ);
+    u32 num_actual_reversible_edits = num_reversible_edits;
+
+    for (u32 i = 0; i < num_reversible_edits; ++i)
+    {
+        u32 num_compound_undo_seq = rand_range_u32_inclusive(
+            prng,
+            1, MAX_COMPOUND_UNDO_SEQ);
+
+        u32 last_top = get_last_record_top(&list->undo_records);
+        begin_undo_sequence(&list->undo_records, 0);
+        for (u32 j = 0; j < num_compound_undo_seq; ++j)
+        {
+            rand_replace_2(list, prng);
+        }
+        end_undo_sequence(&list->undo_records, &list->redo_records);
+
+        if (last_top == get_last_record_top(&list->undo_records))
+        {
+            num_actual_reversible_edits--;
+        }
+    }
+
+    if (num_actual_reversible_edits <= list->undo_records.num_records)
+    {
+        u32 size_before = list->size;
+        u32 lcnt_before = list->lcnt;
+
+        u8 before[list->size];
+        write_to_buffer(list, before, list->size);
+
+        for (u32 i = 0; i < num_actual_reversible_edits; undo(win), ++i);
+        if (list->redo_records.num_records == num_actual_reversible_edits) 
+        {
+            for (u32 i = 0; i < num_actual_reversible_edits; redo(win), ++i);
+
+            u8 after[list->size];
+
+            write_to_buffer(list, after, list->size);
+
+            Assert(size_before == list->size);
+            Assert(lcnt_before == list->lcnt);
+            Assert(strncmp((const char *) before, (const char *) after, list->size) == 0);
+        }
+    }
+
+    list_invariants(list);
+    free_piece_list(list);
+    free_screen(&screen);
+}
+
 TEST(undo_test)
 void undo_test(prng *prng)
 {
     screen screen = {};
     initialize_screen(&screen);
     window *win = create_window(&screen, LeafBuffer, 0);
-    piece_list *list = rand_list(prng);
+    piece_list *list = rand_list_2(prng);
 
     map_buffer_to_window(list, win);
 
-    // u32 num_pieces_before = list->num_pieces;
     u32 size_before = list->size;
     u32 lcnt_before = list->lcnt;
 
@@ -199,92 +384,151 @@ void undo_test(prng *prng)
     write_to_buffer(list, before, list->size);
 
     u32 num_reversible_edits = rand_range_u32_inclusive(prng, 1, MAX_UNDO_REDO_SEQ);
+    u32 num_actual_reversible_edits = num_reversible_edits;
 
     for (u32 i = 0; i < num_reversible_edits; ++i)
     {
-        undo_node *node = allocate_tree_node(
-            &list->history_arena,
-            &list->history);
-        replace_result rep = rand_replace(list, prng);
-        if (rep.undo_header)
+        u32 num_compound_undo_seq = rand_range_u32_inclusive(prng, 1, MAX_COMPOUND_UNDO_SEQ);
+        u32 last_top = get_last_record_top(&list->undo_records);
+        begin_undo_sequence(&list->undo_records, 0);
+        for (u32 j = 0; j < num_compound_undo_seq; ++j)
         {
-            node->data = rep.undo_header;
-            insert_node(&list->history, node);
+            rand_replace_2(list, prng);
         }
-        else
+        end_undo_sequence(&list->undo_records, &list->redo_records);
+        if (last_top == get_last_record_top(&list->undo_records))
         {
-            num_reversible_edits = i;
-            break;
+            num_actual_reversible_edits--;
         }
+
+
     }
 
-    for (u32 i = 0; i < num_reversible_edits; undo(win), ++i);
+    if (num_actual_reversible_edits <= list->undo_records.num_records)
+    {
 
-    u8 after[list->size];
+        for (u32 i = 0; i < num_actual_reversible_edits; ++i)
+        {
+            undo(win);
+        }
 
-    write_to_buffer(list, after, list->size);
+        u8 after[list->size];
 
-    Assert(size_before == list->size);
-    // Assert(num_pieces_before == list->num_pieces);
-    Assert(lcnt_before == list->lcnt);
-    Assert(strncmp((const char *) before, (const char *) after, list->size) == 0);
+        write_to_buffer(list, after, list->size);
+
+        Assert(size_before == list->size);
+        Assert(lcnt_before == list->lcnt);
+        Assert(strncmp((const char *) before, (const char *) after, list->size) == 0);
+    }
 
     list_invariants(list);
     free_piece_list(list);
     free_screen(&screen);
 }
 
-TEST(undo_redo)
-void undo_redo(prng *prng)
-{
-    screen screen = {};
-    initialize_screen(&screen);
-    window *win = create_window(&screen, LeafBuffer, 0);
-    piece_list *list = rand_list(prng);
 
-    map_buffer_to_window(list, win);
 
-    u32 num_reversible_edits = rand_range_u32_inclusive(prng, 1, MAX_UNDO_REDO_SEQ);
+// TST(undo_test)
+// void undo_test(prng *prng)
+// {
+//     screen screen = {};
+//     initialize_screen(&screen);
+//     window *win = create_window(&screen, LeafBuffer, 0);
+//     piece_list *list = rand_list(prng);
+//
+//     map_buffer_to_window(list, win);
+//
+//     // u32 num_pieces_before = list->num_pieces;
+//     u32 size_before = list->size;
+//     u32 lcnt_before = list->lcnt;
+//
+//     u8 before[list->size];
+//     write_to_buffer(list, before, list->size);
+//
+//     u32 num_reversible_edits = rand_range_u32_inclusive(prng, 1, MAX_UNDO_REDO_SEQ);
+//
+//     for (u32 i = 0; i < num_reversible_edits; ++i)
+//     {
+//         undo_node *node = allocate_tree_node(&list->history_arena, &list->history);
+//         replace_result rep = rand_replace(list, prng);
+//         if (rep.undo_header)
+//         {
+//             node->data = rep.undo_header;
+//             insert_node(&list->history, node);
+//         }
+//         else
+//         {
+//             num_reversible_edits = i;
+//             break;
+//         }
+//     }
+//
+//     for (u32 i = 0; i < num_reversible_edits; undo(win), ++i);
+//
+//     u8 after[list->size];
+//
+//     write_to_buffer(list, after, list->size);
+//
+//     Assert(size_before == list->size);
+//     Assert(lcnt_before == list->lcnt);
+//     Assert(strncmp((const char *) before, (const char *) after, list->size) == 0);
+//
+//     list_invariants(list);
+//     free_piece_list(list);
+//     free_screen(&screen);
+// }
 
-    for (u32 i = 0; i < num_reversible_edits; ++i)
-    {
-        undo_node *node = allocate_tree_node(
-            &list->history_arena,
-            &list->history);
-        replace_result rep = rand_replace(list, prng);
-        if (rep.undo_header)
-        {
-            node->data = rep.undo_header;
-            insert_node(&list->history, node);
-        }
-        else
-        {
-            num_reversible_edits = i;
-            break;
-        }
-    }
-
-    u32 size_before = list->size;
-    u32 lcnt_before = list->lcnt;
-
-    u8 before[list->size];
-    write_to_buffer(list, before, list->size);
-
-    for (u32 i = 0; i < num_reversible_edits; undo(win), ++i);
-    for (u32 i = 0; i < num_reversible_edits; redo(win), ++i);
-
-    u8 after[list->size];
-
-    write_to_buffer(list, after, list->size);
-
-    Assert(size_before == list->size);
-    Assert(lcnt_before == list->lcnt);
-    Assert(strncmp((const char *) before, (const char *) after, list->size) == 0);
-
-    list_invariants(list);
-    free_piece_list(list);
-    free_screen(&screen);
-}
+// TST(undo_redo)
+// void undo_redo(prng *prng)
+// {
+//     screen screen = {};
+//     initialize_screen(&screen);
+//     window *win = create_window(&screen, LeafBuffer, 0);
+//     piece_list *list = rand_list(prng);
+//
+//     map_buffer_to_window(list, win);
+//
+//     u32 num_reversible_edits = rand_range_u32_inclusive(prng, 1, MAX_UNDO_REDO_SEQ);
+//
+//     for (u32 i = 0; i < num_reversible_edits; ++i)
+//     {
+//         undo_node *node = allocate_tree_node(
+//             &list->history_arena,
+//             &list->history);
+//         replace_result rep = rand_replace(list, prng);
+//         if (rep.undo_header)
+//         {
+//             node->data = rep.undo_header;
+//             insert_node(&list->history, node);
+//         }
+//         else
+//         {
+//             num_reversible_edits = i;
+//             break;
+//         }
+//     }
+//
+//     u32 size_before = list->size;
+//     u32 lcnt_before = list->lcnt;
+//
+//     u8 before[list->size];
+//     write_to_buffer(list, before, list->size);
+//
+//     for (u32 i = 0; i < num_reversible_edits; undo(win), ++i);
+//     for (u32 i = 0; i < num_reversible_edits; redo(win), ++i);
+//
+//     u8 after[list->size];
+//
+//     write_to_buffer(list, after, list->size);
+//
+//     Assert(size_before == list->size);
+//     Assert(lcnt_before == list->lcnt);
+//     Assert(strncmp((const char *) before, (const char *) after, list->size) == 0);
+//
+//     list_invariants(list);
+//     free_piece_list(list);
+//     free_screen(&screen);
+// }
 
 TEST(search_string)
 void search_string(prng *prng)
@@ -292,7 +536,7 @@ void search_string(prng *prng)
     screen screen = {};
     initialize_screen(&screen);
     window *win = create_window(&screen, LeafBuffer, 0);
-    piece_list *list = rand_list(prng);
+    piece_list *list = rand_list_2(prng);
     map_buffer_to_window(list, win);
 
     INIT_STACK_STRING(s, MAX_STRING_LEN);
@@ -316,9 +560,7 @@ void search_string(prng *prng)
     for (u32 i = 0; i < list->num_matches; ++i)
     {
         u32 test_position = list->matches[i];
-        buffer_cursor test_cursor = cursor_from_position(
-            &list->iter,
-            test_position);
+        buffer_cursor test_cursor = cursor_from_position(&list->iter, test_position);
         found |= (test_cursor.x == bc.x && test_cursor.y == bc.y);
     }
 
@@ -333,7 +575,7 @@ void search_string_2(prng *prng)
     screen screen = {};
     initialize_screen(&screen);
     window *win = create_window(&screen, LeafBuffer, 0);
-    piece_list *list = rand_list(prng);
+    piece_list *list = rand_list_2(prng);
     map_buffer_to_window(list, win);
 
     buffer_range br = rand_buffer_range(list, prng);
@@ -363,7 +605,6 @@ void search_string_2(prng *prng)
         .pieces = rep.pieces,
         .start = rep.start,
         .end = rep.end,
-        .flags = rep.flags,
     };
 
     write_piece_text(list, p_range, &s_string);
@@ -387,27 +628,85 @@ void search_string_2(prng *prng)
     free(s_string.buffer);
 
 }
-
-TEST(insert_mode_seq)
-void insert_mode_seq(prng *p)
+#if 0
+TST(insert_mode_insert_replace)
+void insert_mode_insert_replace(prng *p)
 {
-    // This simulates, a insert mode sequence of zero or more insertions,
-    // followed by 0 or more deletions, followed by an insert mode sequence.
-    // This repeats at most 10 times.
-    // 10 Should be a good enough number of times to ascertain code correctness.
-
-    u32 max_length_added = MAX_INSERT_MODE_SEQ * MAX_STRING_LEN;
-    insert_seq_result *seq = create(max_length_added);
-
     prng clone = clone_prng(p);
 
     screen screen = {};
     initialize_screen(&screen);
 
+    piece_list *list_a = rand_list(p);
+    window *win_a = create_window(&screen, LeafBuffer, 0);
+    map_buffer_to_window(list_a, win_a);
+
+    INIT_STACK_STRING(text, MAX_STRING_LEN);
+    rand_ascii_string(&text, p, 1, MAX_STRING_LEN);
+
+    u32 cy = rand_range_u32_inclusive(p, 0, list_a->lcnt);
+    u32 cx = rand_range_u32_inclusive(p, 0, MAX_LINE_LEN);
+
+    motion_spec m_spec = {
+        .motion_type = Motion_Vertical,
+        .motion_quantifier = cy,
+        .flags = Backwards | Exclusive,
+        .open_close_index = -1
+    };
+    move_by_motion(win_a, m_spec);
+
+    m_spec.motion_type = Motion_Horizontal;
+    m_spec.motion_quantifier = cx;
+    m_spec.flags = Exclusive;
+
+    move_by_motion(win_a, m_spec);
+
+    buffer_cursor bc = win_a->bc;
+    win_cursor start_cursor = rand_buffer_cursor_clamped(list_a, p, win_a->bc);
+
+    {
+        delete_insert_mode_(win_a, start_cursor);
+
+        insert_insert_mode_(win_a, text);
+        commit_undo(list_a);
+        // commit_insert_mode_undo(list_a);
+    }
+
+    piece_list *list_b = rand_list(&clone);
+    window *win_b = create_window(&screen, LeafBuffer, 0);
+    map_buffer_to_window(list_b, win_b);
+    win_b->bc = bc;
+
+    undo_node *node = allocate_tree_node(&list_b->history_arena, &list_b->history);
+    node->bc = win_b->bc;
+    piece piece = make_piece(list_b, from_string(text));
+    piece_range p_range = { .pieces = &piece, .count = 1 };
+    replace_result rep = range_replace(list_b, start_cursor, bc, p_range);
+
+    node->data = rep.undo_header;
+    insert_node(&list_b->history, node);
+
+    b32 equal_lists = lists_are_equal(list_a, list_b);
+    Assert(equal_lists);
+    free_screen(&screen);
+    free_piece_list(list_a);
+    free_piece_list(list_b);
+}
+
+TST(insert_mode_insert_delete_iso)
+void insert_mode_insert_delete_iso(prng *p)
+{
+    prng clone = clone_prng(p);
+
+    screen screen = {};
+    initialize_screen(&screen);
 
     piece_list *list_a = rand_list(p);
     window *win_a = create_window(&screen, LeafBuffer, 0);
     map_buffer_to_window(list_a, win_a);
+
+    INIT_STACK_STRING(text, MAX_STRING_LEN);
+    rand_ascii_string(&text, p, 1, MAX_STRING_LEN);
 
     u32 cy = rand_range_u32_inclusive(p, 0, list_a->lcnt);
     u32 cx = rand_range_u32_inclusive(p, 0, MAX_LINE_LEN);
@@ -428,7 +727,59 @@ void insert_mode_seq(prng *p)
 
         move_by_motion(win_a, m_spec);
 
-        insert_mode_sequence(win_a, p, seq);
+        win_cursor prev_cursor = win_a->bc;
+
+        insert_insert_mode_(win_a, text);
+        delete_insert_mode_(win_a, prev_cursor);
+        commit_insert_mode_undo(list_a);
+    }
+
+    piece_list *list_b = rand_list(&clone);
+    window *win_b = create_window(&screen, LeafBuffer, 0);
+    map_buffer_to_window(list_b, win_b);
+
+    b32 equal_lists = lists_are_equal(list_a, list_b);
+    Assert(equal_lists);
+    free_screen(&screen);
+    free_piece_list(list_a);
+    free_piece_list(list_b);
+}
+
+// TST(insert_mode_seq_simple)
+void insert_mode_seq_simple(prng *p)
+{
+    prng clone = clone_prng(p);
+
+    screen screen = {};
+    initialize_screen(&screen);
+
+    piece_list *list_a = rand_list(p);
+    window *win_a = create_window(&screen, LeafBuffer, 0);
+    map_buffer_to_window(list_a, win_a);
+
+    INIT_STACK_STRING(text, MAX_STRING_LEN);
+    rand_ascii_string(&text, p, 1, MAX_STRING_LEN);
+
+    u32 cy = rand_range_u32_inclusive(p, 0, list_a->lcnt);
+    u32 cx = rand_range_u32_inclusive(p, 0, MAX_LINE_LEN);
+    {
+        Assert(win_a->bc.y == 0);
+
+        motion_spec m_spec = {
+            .motion_type = Motion_Vertical,
+            .motion_quantifier = cy,
+            .flags = Backwards | Exclusive,
+            .open_close_index = -1
+        };
+        move_by_motion(win_a, m_spec);
+
+        m_spec.motion_type = Motion_Horizontal;
+        m_spec.motion_quantifier = cx;
+        m_spec.flags = Exclusive;
+
+        move_by_motion(win_a, m_spec);
+
+        insert_insert_mode(win_a, text);
         commit_insert_mode_undo(list_a);
     }
 
@@ -450,28 +801,104 @@ void insert_mode_seq(prng *p)
 
         move_by_motion(win_b, m_spec);
 
-        if (seq->min.x != seq->max.x || seq->min.y != seq->max.y || seq->text_added.len > 0)
-        {
-            undo_node *node = allocate_tree_node(
-                &list_b->history_arena,
-                &list_b->history);
-            node->bc = win_b->bc;
+        undo_node *node = allocate_tree_node(&list_b->history_arena, &list_b->history);
+        node->bc = win_b->bc;
 
+        piece piece = make_piece(list_b, from_string(text));
+        piece_range p_range = { .pieces = &piece, .count = 1 };
+        replace_result rep = range_replace(list_b, win_b->bc, win_b->bc, p_range);
+        node->data = rep.undo_header;
+        insert_node(&list_b->history, node);
+    }
+
+    b32 equal_lists = lists_are_equal(list_a, list_b);
+    Assert(equal_lists);
+    free_screen(&screen);
+    free_piece_list(list_a);
+    free_piece_list(list_b);
+}
+#endif
+
+TEST(insert_mode_seq)
+void insert_mode_seq(prng *p)
+{
+    // This simulates, a insert mode sequence of zero or more insertions,
+    // followed by 0 or more deletions, followed by an insert mode sequence.
+    // This repeats at most 10 times.
+    // 10 Should be a good enough number of times to ascertain code correctness.
+
+    u32 max_length_added = MAX_INSERT_MODE_SEQ * MAX_STRING_LEN;
+    insert_seq_result *seq = create(max_length_added);
+
+    prng clone = clone_prng(p);
+
+    screen screen = {};
+    initialize_screen(&screen);
+
+
+    piece_list *list_a = rand_list_2(p);
+    window *win_a = create_window(&screen, LeafBuffer, 0);
+    map_buffer_to_window(list_a, win_a);
+
+    u32 cy = rand_range_u32_inclusive(p, 0, list_a->lcnt);
+    u32 cx = rand_range_u32_inclusive(p, 0, MAX_LINE_LEN);
+    {
+        Assert(win_a->bc.y == 0);
+
+        motion_spec m_spec = {
+            .motion_type = Motion_Vertical,
+            .motion_quantifier = cy,
+            .flags = MotionFlags_Backwards | MotionFlags_Exclusive,
+            .open_close_index = -1
+        };
+        move_by_motion(win_a, m_spec);
+
+        m_spec.motion_type = Motion_Horizontal;
+        m_spec.motion_quantifier = cx;
+        m_spec.flags = MotionFlags_Exclusive;
+
+        move_by_motion(win_a, m_spec);
+
+        begin_undo(win_a);
+        insert_mode_sequence(win_a, p, seq);
+        commit_insert_mode_undo(list_a);
+        end_undo(win_a);
+    }
+
+    piece_list *list_b = rand_list_2(&clone);
+    window *win_b = create_window(&screen, LeafBuffer, 0);
+    map_buffer_to_window(list_b, win_b);
+    {
+        motion_spec m_spec = {
+            .motion_type = Motion_Vertical,
+            .motion_quantifier = cy,
+            .flags = MotionFlags_Backwards | MotionFlags_Exclusive,
+            .open_close_index = -1
+        };
+        move_by_motion(win_b, m_spec);
+
+        m_spec.motion_type = Motion_Horizontal;
+        m_spec.motion_quantifier = cx;
+        m_spec.flags = MotionFlags_Exclusive;
+
+        move_by_motion(win_b, m_spec);
+        begin_undo(win_b) ;
+
+        if ((seq->min.x != seq->max.x) || 
+            (seq->min.y != seq->max.y) || 
+            (seq->text_added.len > 0))
+        {
+            piece piece;
+            piece_slice p_slice =  {};
             if (seq->text_added.len > 0)
             {
-                piece piece = make_piece(list_b, from_string(seq->text_added));
-                piece_range p_range = { .pieces = &piece, .count = 1 };
-                replace_result rep = range_replace(list_b, seq->min, seq->max, p_range);
-                node->data = rep.undo_header;
+                piece = make_piece(list_b, from_string(seq->text_added));
+                p_slice.base = &piece;
+                p_slice.count = 1;
             }
-            else
-            {
-                piece_range p_range = {};
-                replace_result rep = range_replace(list_b, seq->min, seq->max, p_range);
-                node->data = rep.undo_header;
-            }
-            insert_node(&list_b->history, node);
+            range_replace_2(list_b, seq->min, seq->max, p_slice);
         }
+        end_undo(win_b);
     }
 
     b32 equal_lists = lists_are_equal(list_a, list_b);

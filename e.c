@@ -2,10 +2,12 @@
 #include <stdio.h>
 #include <assert.h>
 #include <unistd.h>
+#include "string.c"
 #include "buffer.c"
 #include "node.c"
 #include "search.c"
 #include "iter.c"
+#include "undo.c"
 #include "piece_list.c"
 #include "grid.c"
 #include "window.c"

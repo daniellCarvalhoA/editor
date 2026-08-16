@@ -74,21 +74,20 @@ typedef struct insert_mode
 
 struct base_iter;
 
-typedef enum
-{
-    Edit_None  = 0x0,
-    Edit_Left  = 0x1,
-    Edit_Right = 0x2,
-    Edit_Both  = 0x4,
-} edit_flags;
+//typedef enum
+//{
+    //Edit_None  = 0x0,
+    //Edit_Left  = 0x1,
+    //Edit_Right = 0x2,
+    //Edit_Both  = 0x4,
+//} edit_flags;
 
 typedef struct
 {
     u32 count;
-    const piece *pieces;
+    piece *pieces;
     u32 start;
     u32 end;
-    edit_flags flags;
 } piece_range;
 
 typedef struct
@@ -100,13 +99,13 @@ typedef struct
     };
     u32 start;
     u32 end;
-    edit_flags flags;
 } replace_result;
 
 typedef struct piece_list
 {
     memory_arena list_arena;
     memory_arena insert_mode_arena;
+
     segmented_node root_sentinel;
     segmented_node *first_free_node;
 
@@ -120,7 +119,6 @@ typedef struct piece_list
     u32 lines_deleted;
     b32 wrapped;
 
-    // u32 num_pieces;
     u32 size;  
     u32 lcnt;
 
@@ -135,7 +133,13 @@ typedef struct piece_list
     memory_arena history_arena;
     history history;
 
-    undo_node *staged;
+    memory_arena undo_arena;
+    Undo_Records undo_records;
+
+    memory_arena redo_arena;
+    Redo_Records redo_records;
+
+    // undo_node *staged;
 
     u32 num_windows;
     dlist window_sentinel;
@@ -172,6 +176,14 @@ typedef struct
     piece piece;
 } iter;
 
+
+static inline void list_invariants(piece_list *list);
+static inline buffer_cursor cursor_from_position(base_iter *last_location, u32 position);
+static inline u32 position_from_cursor(base_iter *last_location, buffer_cursor bc);
+static inline base_iter find_abs_idx(base_iter *last_location, u32 abs_idx);
+static inline void replace(piece_list *list, cursor start, cursor end, piece *pieces, u32 num_pieces);
+static inline base_iter find_cursor(base_iter *last_location, buffer_cursor bc);
+static inline void copy_range_2(cursor start, cursor end, u32 count, piece_slice slice);
 
 static void clear_insert_state(insert_mode *mode)
 {

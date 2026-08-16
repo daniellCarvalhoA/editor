@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include "e_core.h"
 
 typedef int8_t int8;
 typedef int16_t int16;
@@ -25,7 +26,9 @@ typedef uintptr_t uintptr;
 typedef size_t memory_index;
     
 typedef float real32;
+typedef float r32;
 typedef double real64;
+typedef double r64;
     
 typedef int8 i8;
 typedef int16 i16;
@@ -104,6 +107,13 @@ typedef u8 b16;
         Assert((node) == (head)); \
         (head) = (head)->next; \
     }
+
+#define LIST_POP(head, old) \
+    if (head) \
+    { \
+        (old) = (head);\
+        (head) = (head->next); \
+    } 
 
 #define LIST_REPLACE(prev, old_node, new_node, head) \
     if (prev) \

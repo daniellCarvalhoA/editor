@@ -1,3 +1,23 @@
+// TODO: There is a potential bug in the allocator:
+//      The memory headers assume the requested allocation size, 
+//      matches exactly the size of the allocation.
+//      This may not be the case due to alignment.
+//      We must either track allocation sizes in the block headers,
+//      or make sure the alignment is the same for every allocation 
+//      on this arena. 
+//
+//      Currently this allocator only allocates:
+//
+//          .undo_memory_header,
+//          .undo_memory_header,
+//          .undo_node
+//      All of these are guaranteed to align to 4 bytes, 
+//      which is the default alignment.
+//      TODO: Make a compile time assertion that 
+//      all of those structs are 4 byte aligned.
+//      So right now there is no problem.
+//
+//
 inline b32 is_header_empty(const undo_memory_header *header)
 {
     b32 result = (header->ins_count == 0) && (header->del_count == 0);
@@ -139,15 +159,94 @@ static undo_memory_header *allocate_undo_memory_block(
     return data;
 }
 
-static inline void free_memory_block(history *history, void *ptr, memory_index block_size)
+static undo_memory_header *merge_memory_headers(
+    history *history,
+    memory_arena *arena,
+    undo_memory_header *a,
+    undo_memory_header *b)
+{
+    Assert(a);
+    // NOTE: *b happened before *a
+    if (!b)
+    {
+        return a;
+    }
+    undo_memory_header *result;
+
+    // TODO: IMPLEMENT a *realloc* function
+
+    if (a->abs_idx + 1 == b->abs_idx)
+    {
+        if (b->del_count > 0 && a->del_count > 0)
+        {
+            result = allocate_undo_memory_block(history, arena, a->del_count + b->del_count);
+
+            result->abs_idx = a->abs_idx;
+            result->ins_count = a->ins_count + b->ins_count;
+            result->del_count = a->del_count + b->del_count;
+            result->ref_count = 1;
+
+            piece *a_pieces = get_pieces_from_header(a);
+            piece *b_pieces = get_pieces_from_header(b);
+            piece *new_pieces = get_pieces_from_header(result);
+            memcpy(new_pieces, a_pieces, a->del_count);
+            memcpy(new_pieces + a->del_count, b_pieces, b->del_count);
+
+            free_undo_memory_block(arena, history, b);
+        }
+        else
+        {
+            b->ins_count += a->ins_count;
+            result = b;
+        }
+        free_undo_memory_block(arena, history, a);
+    }
+    else if (a->abs_idx == b->abs_idx + 1)
+    {
+        Assert(a->del_count == 0);
+        b->ins_count += a->ins_count;
+        result = b;
+        free_undo_memory_block(arena, history, a);
+    }
+    else if (a->abs_idx == b->abs_idx)
+    {
+        result = b;
+        free_undo_memory_block(arena, history, a);
+    }
+    else
+    {
+        LIST_INSERT(b, a);
+        result = b;
+
+    }
+    return result;
+}
+
+
+static inline void free_memory_block(
+    memory_arena *history_arena,
+    history *history,
+    void *ptr,
+    memory_index block_size)
 {
     undo_memory_block *block = (undo_memory_block *) ptr;
     block->size = block_size;
     block->next = 0;
-    insert_block(history, block);
+    // TODO: Account for alignment
+    if (((u8 *) block + block_size) == (history_arena->base + history_arena->used))
+    {
+        history_arena->used -= block_size;
+    }
+    else
+    {
+        insert_block(history, block);
+    }
 }
 
-static void free_undo_memory_block(history *history, undo_memory_header *header)
+static void free_undo_memory_block(
+    memory_arena *history_arena, 
+    history *history,
+    undo_memory_header *header)
 {
     for (undo_memory_header *tmp = header; tmp;)
     {
@@ -157,10 +256,24 @@ static void free_undo_memory_block(history *history, undo_memory_header *header)
         if (tmp->ref_count == 0)
         {
             memory_index size_of_block = get_size_for_undo_data(tmp->del_count);
-            free_memory_block(history, (void *) tmp, size_of_block);
+            free_memory_block(history_arena, history, (void *) tmp, size_of_block);
         }
         tmp = next;
     }
+}
+
+static void free_tree_node(
+    memory_arena *history_arena,
+    history *history,
+    undo_node *node)
+{
+    if (node->data)
+    {
+        free_undo_memory_block(history_arena, history, node->data);
+
+    }
+    memory_index size_of_block = sizeof(undo_node);
+    free_memory_block(history_arena, history, (void *) node, size_of_block);
 }
 
 static inline void initialize_undo_history(history *history)
@@ -202,7 +315,7 @@ static inline void insert_node(history *history, undo_node *node)
         history->curr_node = node;
     }
 }
-
+#if 0
 static void insert_at_current(
     history *history,
     memory_arena *history_arena,
@@ -236,6 +349,7 @@ static inline void append_to_current(history *history, undo_memory_header *data)
 {
     LIST_INSERT(history->curr_node->data, data);
 }
+#endif
 
 static inline undo_node *undo_node_pop(history *history)
 {

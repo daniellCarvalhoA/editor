@@ -4,7 +4,7 @@ typedef struct undo_memory_header
     union
     {
         struct undo_memory_header *next;
-        u32 count;
+        u64 count;
     };
     u16 abs_idx;
     u16 ins_count;
@@ -18,6 +18,8 @@ typedef struct undo_memory_block
     struct undo_memory_block *next; 
     memory_index size;             
 } undo_memory_block;
+
+
 
 typedef struct undo_node 
 {
@@ -39,6 +41,9 @@ typedef struct history
     undo_node *free_node;
     undo_memory_block *first_block;
 } history;
+
+static inline void free_memory_block(memory_arena *history_arena, history *history, void *ptr, memory_index block_size);
+static void free_undo_memory_block(memory_arena *history_arena, history *history, undo_memory_header *header);
 
 static b32 headers_are_equal(undo_memory_header *a, undo_memory_header *b)
 {
@@ -101,8 +106,8 @@ static inline b32 histories_are_equal(history a, history b)
 {
     b32 roots_are_equal = trees_are_equal(a.root, b.root);
     b32 curr_is_equal   = trees_are_equal(a.curr_node, b.curr_node);
-    b32 equal_blocks    = blocks_are_equal(a.first_block, b.first_block);
-    b32 result =  roots_are_equal && curr_is_equal && equal_blocks;
+    // b32 equal_blocks    = blocks_are_equal(a.first_block, b.first_block);
+    b32 result =  roots_are_equal && curr_is_equal; // && equal_blocks;
     return result;
 }
 

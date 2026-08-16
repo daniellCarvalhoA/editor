@@ -1,4 +1,3 @@
-
 static void edit(editor_state *state);
 
 static parse_result parse_normal(editor_state *editor, str token) 
@@ -9,7 +8,7 @@ static parse_result parse_normal(editor_state *editor, str token)
 
     action_spec *a_spec  = &p_state->command.a_spec;
     motion_spec *m_spec_ = &p_state->command.m_spec_;
-    motion_spec *c_spec_ = &p_state->command.c_spec_;
+    // motion_spec *c_spec_ = &p_state->command.c_spec_;
     window *active_window = editor->screen.active_window;
 
 
@@ -17,19 +16,23 @@ static parse_result parse_normal(editor_state *editor, str token)
     {
         a_spec->action_quantifier = a_spec->action_quantifier * 10 + (token.buffer[0] - '0');
         m_spec_->motion_quantifier = m_spec_->motion_quantifier * 10 + (token.buffer[0] - '0');
-        c_spec_->motion_quantifier = c_spec_->motion_quantifier * 10 + (token.buffer[0] - '0');
+        // c_spec_->motion_quantifier = c_spec_->motion_quantifier * 10 + (token.buffer[0] - '0');
         p_state->state = Middle;
         return NotDone;
     }
 
     if (p_state->state == Middle && m_spec_->motion_type == Motion_NoMotion)
     {
-        if  (m_spec_->flags & Range)
+        if  (m_spec_->flags & MotionFlags_Range)
         {
             i32 pair_index = get_pair(token.buffer[0]);
 
             if (pair_index >= 0)
             {
+                if (editor->edit_mode == Visual)
+                {
+                    m_spec_->flags |= MotionFlags_Visual;
+                }
                 m_spec_->open_close_index = pair_index;
                 m_spec_->motion_type = Motion_Search;
                 return Ok;
@@ -69,7 +72,7 @@ static parse_result parse_normal(editor_state *editor, str token)
         case '{':
         {
             m_spec_->motion_type = Motion_Paragraph;
-            m_spec_->flags |= Backwards;
+            m_spec_->flags |= MotionFlags_Backwards;
             m_spec_->motion_quantifier = Maximum(1, m_spec_->motion_quantifier);
             result = Ok;
 
@@ -88,10 +91,11 @@ static parse_result parse_normal(editor_state *editor, str token)
 
             if (buffer->num_matches > 0)
             {
-                editor->screen.change &= ~Render_NoShowSearchHighlight;
+                editor->screen.change |= Render_ShowSearchHighlight;
                 buffer->current_match = (buffer->current_match + 1) % buffer->num_matches;
-                active_window->bc = active_window->dc = cursor_from_position(&buffer->iter, buffer->matches[buffer->current_match]);
-                // (*active_window)->buffer->changed = true;
+                active_window->bc = active_window->dc = cursor_from_position(
+                    &buffer->iter,
+                    buffer->matches[buffer->current_match]);
             }
         } break;
 
@@ -108,10 +112,9 @@ static parse_result parse_normal(editor_state *editor, str token)
 
             if (buffer->num_matches > 0)
             {
-                editor->screen.change &= ~Render_NoShowSearchHighlight;
+                editor->screen.change |= Render_ShowSearchHighlight;
                 buffer->current_match = (buffer->current_match + (buffer->num_matches - 1)) % buffer->num_matches;
                 active_window->bc = active_window->dc = cursor_from_position(&buffer->iter, buffer->matches[buffer->current_match]);
-                // (*active_window)->buffer->changed = true;
             }
 
         } break;
@@ -120,7 +123,6 @@ static parse_result parse_normal(editor_state *editor, str token)
         {
             interacting_window = active_window;
             editor->screen.active_window = editor->screen.command_window;
-            editor->searching = true;
             parse_command(editor, token);
         } break;
 
@@ -206,7 +208,7 @@ static parse_result parse_normal(editor_state *editor, str token)
         case 'b':
         {
             m_spec_->motion_type = Motion_Word;
-            m_spec_->flags |= Backwards;
+            m_spec_->flags |= MotionFlags_Backwards;
             result = Ok;
         } break;
 
@@ -266,20 +268,21 @@ static parse_result parse_normal(editor_state *editor, str token)
 
         case 'd':
         {
-           if (is_visual(editor->edit_mode))
+            if (is_visual(editor->edit_mode))
             {
-                a_spec->action_type = Delete;
+                a_spec->action_type = Replace;
+                a_spec->m_mod = NormalChange;
                 result = Ok;
             }
-            else if (p_state->state == Middle && a_spec->action_type == Delete)
+            else if (p_state->state == Middle && a_spec->action_type == Replace)
             {
                 m_spec_->motion_type = Motion_Vertical;
-                m_spec_->flags |= Backwards;
+                m_spec_->flags |= MotionFlags_Backwards;
                 result = Ok;
             } 
             else if (p_state->state == Start)
             {
-                a_spec->action_type = Delete;
+                a_spec->action_type = Replace;
                 p_state->state = Middle;
                 result = NotDone;
             } 
@@ -290,22 +293,22 @@ static parse_result parse_normal(editor_state *editor, str token)
             a_spec->m_mod = InsertionChange;
             if (is_visual(editor->edit_mode))
             {
-                a_spec->action_type = Delete;
-                m_spec_->flags |= Exclusive;
+                a_spec->action_type = Replace;
+                m_spec_->flags |= MotionFlags_Exclusive;
                 result = Ok;
             }
-            else if (p_state->state == Middle && a_spec->action_type == Delete)
+            else if (p_state->state == Middle && a_spec->action_type == Replace)
             {
                 m_spec_->motion_type = Motion_Vertical;
-                m_spec_->flags |= Backwards;
-                m_spec_->flags |= Exclusive;
+                m_spec_->flags |= MotionFlags_Backwards;
+                m_spec_->flags |= MotionFlags_Exclusive;
                 result = Ok;
             } 
             else if (p_state->state == Start)
             {
-                a_spec->action_type = Delete;
+                a_spec->action_type = Replace;
                 p_state->state = Middle;
-                m_spec_->flags |= Exclusive;
+                m_spec_->flags |= MotionFlags_Exclusive;
                 result = NotDone;
             } 
         } break;
@@ -323,14 +326,14 @@ static parse_result parse_normal(editor_state *editor, str token)
             }
             else if (p_state->state == Middle && a_spec->action_type != NoAction)
             {
-                m_spec_->flags |= Range;
-                m_spec_->flags |= Exclusive;
+                m_spec_->flags |= MotionFlags_Range;
+                m_spec_->flags |= MotionFlags_Exclusive;
                 result = NotDone;
             }
             else if (p_state->state == Start && is_visual(editor->edit_mode))
             {
-                m_spec_->flags |= Range;
-                m_spec_->flags |= Exclusive;
+                m_spec_->flags |= MotionFlags_Range;
+                m_spec_->flags |= MotionFlags_Exclusive;
                 p_state->state = Middle;
                 result = NotDone;
             }
@@ -359,7 +362,6 @@ static parse_result parse_normal(editor_state *editor, str token)
                 {
                     undo(active_window);
                 }
-                active_window->buffer->changed = true;
                 result = Ok;
             }
         } break;
@@ -389,7 +391,7 @@ static parse_result parse_normal(editor_state *editor, str token)
             active_window->change |= Render_ModeChange;
             a_spec->m_mod       = InsertionChange; 
             m_spec_->motion_type = Dollar;
-            m_spec_->flags       = Inclusive;
+            m_spec_->flags       = MotionFlags_Inclusive;
             // s_result->quantifier = 0;
             result = Ok;
         } break;
@@ -398,14 +400,14 @@ static parse_result parse_normal(editor_state *editor, str token)
         {
             if (p_state->state == Middle && a_spec->action_type != NoAction)
             {
-                m_spec_->flags |= Range;
-                m_spec_->flags &= ~Exclusive;
+                m_spec_->flags |= MotionFlags_Range;
+                m_spec_->flags &= ~MotionFlags_Exclusive;
                 result = NotDone;
             }
             else if (p_state->state == Start && is_visual(editor->edit_mode))
             {
-                m_spec_->flags |= Range;
-                m_spec_->flags &= ~Exclusive;
+                m_spec_->flags |= MotionFlags_Range;
+                m_spec_->flags &= ~MotionFlags_Exclusive;
                 p_state->state = Middle;
                 result = NotDone;
             }
@@ -414,7 +416,7 @@ static parse_result parse_normal(editor_state *editor, str token)
                 active_window->change |= Render_ModeChange;
                 a_spec->m_mod       = InsertionChange; 
                 m_spec_->motion_type = Motion_Horizontal;
-                m_spec_->flags       = Inclusive;
+                m_spec_->flags       = MotionFlags_Inclusive;
                 result = Ok;
             }
         } break;
@@ -423,13 +425,9 @@ static parse_result parse_normal(editor_state *editor, str token)
         {
             active_window->change |= Render_ModeChange;
             a_spec->m_mod       = InsertionChange;
-            a_spec->action_type = Insertion;
 
             m_spec_->motion_type = Dollar;
-            m_spec_->flags       = Inclusive | Follow;
-
-            c_spec_->motion_type = Motion_Vertical;
-            c_spec_->flags = Backwards;
+            m_spec_->flags       = MotionFlags_Inclusive | MotionFlags_Follow;
 
             a_spec->count      = 1;
             a_spec->char_pending[0] = '\n';
@@ -439,11 +437,9 @@ static parse_result parse_normal(editor_state *editor, str token)
         case 'O':
         {
             active_window->change |= Render_ModeChange;
-            a_spec->m_mod = InsertionChange;
-            a_spec->action_type = Insertion;
+            // a_spec->action_type = Insertion;
 
             m_spec_->motion_type = Zero;
-            c_spec_->motion_type = Motion_Vertical;
             a_spec->count      = 1;
             a_spec->char_pending[0] = '\n';
             result = Ok;
@@ -459,7 +455,7 @@ static parse_result parse_normal(editor_state *editor, str token)
         case 'h':
         {
             m_spec_->motion_type = Motion_Horizontal;
-            m_spec_->flags |= Backwards;
+            m_spec_->flags |= MotionFlags_Backwards;
             result = Ok;
         } break;
 
@@ -484,14 +480,14 @@ static parse_result parse_normal(editor_state *editor, str token)
             if (p_state->state == Meta)
             {
                 m_spec_->motion_type = Motion_Vertical;
-                m_spec_->flags |= Backwards;
+                m_spec_->flags |= MotionFlags_Backwards;
                 m_spec_->motion_quantifier = get_height(&editor->screen, active_window) / 2;
                 result = Ok;
             }
             else
             {
                 m_spec_->motion_type = Motion_Vertical;
-                m_spec_->flags |= Backwards;
+                m_spec_->flags |= MotionFlags_Backwards;
                 m_spec_->motion_quantifier = Maximum(1, m_spec_->motion_quantifier);
                 result = Ok;
             }
@@ -550,7 +546,7 @@ static parse_result parse_normal(editor_state *editor, str token)
         case 'F':
         {
             m_spec_->motion_type = Motion_Search; 
-            m_spec_->flags = Backwards;
+            m_spec_->flags = MotionFlags_Backwards;
             if (p_state->state == Start)
             {
                 p_state->state = Middle;
@@ -567,7 +563,7 @@ static parse_result parse_normal(editor_state *editor, str token)
         case 't':
         {
             m_spec_->motion_type = Motion_Search;
-            m_spec_->flags |= Exclusive;
+            m_spec_->flags |= MotionFlags_Exclusive;
             if (p_state->state == Start)
             {
                 p_state->state = Middle;
@@ -582,8 +578,8 @@ static parse_result parse_normal(editor_state *editor, str token)
         case 'T':
         {
             m_spec_->motion_type = Motion_Search;
-            m_spec_->flags |= Exclusive;
-            m_spec_->flags |= Backwards;
+            m_spec_->flags |= MotionFlags_Exclusive;
+            m_spec_->flags |= MotionFlags_Backwards;
             if (p_state->state == Start)
             {
                 p_state->state = Middle;
@@ -619,24 +615,26 @@ static void yank(window *win, paste_buffer *p_buffer, mode edit_mode, motion_spe
     p_buffer->pieces = rep.pieces;
     p_buffer->start  = rep.start;
     p_buffer->end    = rep.end;
-    p_buffer->flags  = rep.flags;
     p_buffer->count  = rep.count;
     p_buffer->type   = paste_type_from_motion(m_spec_.motion_type, edit_mode);
 }
 
-static undo_node *change(window *win, paste_buffer *p_buffer, win_range w_range, str inserted)
+// static undo_node *change(
+static void change(window *win, win_range w_range, str inserted)
 {
     // Assert(p_buffer);
-    if (p_buffer && p_buffer->buffer)
-    {
-        free_paste_buffer(p_buffer);
-    }
+    // if (p_buffer && p_buffer->buffer)
+    // {
+    //     free_paste_buffer(p_buffer);
+    // }
 
-    undo_node *node = allocate_tree_node(&win->buffer->history_arena, &win->buffer->history);
+    // undo_node *node = allocate_tree_node(&win->buffer->history_arena, &win->buffer->history);
     // node->bc = win->bc;
 
     piece piece;
-    piece_range p_range = {};
+    // piece_range p_range = {};
+    piece_slice p_slice = {};
+    
 
     // Assert(!s_result.inserted_count);
 
@@ -656,8 +654,8 @@ static undo_node *change(window *win, paste_buffer *p_buffer, win_range w_range,
         }
 
         piece = make_piece(win->buffer, inserted);
-        p_range.count = 1;
-        p_range.pieces = &piece;
+        p_slice.count = 1;
+        p_slice.base = &piece;
 
         // NOTE: this is wrong, inserted_count is in bytes / this must 
         // be in grapheme clusters.
@@ -666,23 +664,23 @@ static undo_node *change(window *win, paste_buffer *p_buffer, win_range w_range,
         win->bc.x = win->dc.x;
     }
 
-    replace_result rep = range_replace(win->buffer, w_range.first, w_range.one_past_end, p_range);
+    range_replace_2(win->buffer, w_range.first, w_range.one_past_end, p_slice);
+    // replace_result rep = range_replace(win->buffer, w_range.first, w_range.one_past_end, p_range);
 
-    rep.undo_header->ref_count++;
+    // rep.undo_header->ref_count++;
 
-    if (p_buffer)
-    {
-        p_buffer->buffer = win->buffer;
-        p_buffer->header = rep.undo_header;
-        p_buffer->start  = rep.start;
-        p_buffer->end    = rep.end;
-        p_buffer->flags  = rep.flags;
-        p_buffer->count  = 0;
-    }
-
-    win->buffer->changed = true;
-    node->data = rep.undo_header;
-    return node;
+    // if (p_buffer)
+    // {
+    //     p_buffer->buffer = win->buffer;
+    //     p_buffer->header = rep.undo_header;
+    //     p_buffer->start  = rep.start;
+    //     p_buffer->end    = rep.end;
+    //     p_buffer->count  = 0;
+    // }
+    //
+    // win->buffer->changed = true;
+    // node->data = rep.undo_header;
+    // return node;
 }
 
 static inline u8 *get_last_append(window *win)
@@ -690,6 +688,50 @@ static inline u8 *get_last_append(window *win)
     u8 *result = win->buffer->append.text + win->buffer->append.text_len;
     return result;
 }
+
+static inline void change_mode_(editor_state *state)
+{
+    // window *win = state->screen.active_window;
+    switch (state->p_state.command.a_spec.m_mod)
+    {
+        case NoChange:
+        {
+        } break;
+
+        case InsertionChange:
+        {
+            state->edit_mode = Insert;
+            into_insert_mode(state);
+            state->p_state.command.a_spec.m_mod = NoChange;
+        } break;
+
+        case LayoutChange:
+        {
+            state->edit_mode = Layout;
+        } break;
+
+        case LineVisualChange:
+        {
+            state->edit_mode = LineVisual;
+        } break;
+
+        case VisualChange:
+        {
+            state->edit_mode = Visual;
+            // win->change |= Render_VisualModeCursorChange;
+        } break;
+
+        case NormalChange:
+        {
+            state->edit_mode = Normal;
+        }
+
+        default:
+        {
+        } break;
+    }
+}
+
 
 static inline void change_mode(editor_state *state, action_spec *a_spec)
 {
@@ -732,6 +774,13 @@ static void edit(editor_state *state)
     command *command = &state->p_state.command;
     action_spec *a_spec = &command->a_spec;
     motion_spec *m_spec = &command->m_spec_;
+
+    if ((a_spec->m_mod == NoChange) &&
+        (a_spec->action_type == NoAction) && 
+        (m_spec->motion_type == Motion_NoMotion))
+    {
+        return;
+    }
     // motion_spec *c_spec = &command->c_spec_;
     window *win = state->screen.active_window;
 
@@ -740,44 +789,20 @@ static void edit(editor_state *state)
     {
         case NoAction:
         {
-            change_mode(state, a_spec);
+            // 
+            begin_undo(win);
+            // change_mode(state, a_spec);
             move_by_motion(win, *m_spec);
 
-            if (a_spec->m_mod == InsertionChange)
-            {
-                a_spec->inserted.buffer = get_last_append(win);
-                a_spec->m_mod = NoChange;
-            }
-
-            if (is_visual(state->edit_mode))
-            {
-                win->change |= Render_VisualModeCursorChange;
-            }
-        } break;
-
-        case Insertion:
-        {
-            change_mode(state, a_spec);
-            move_by_motion(win, *m_spec);
-            win_range w_range = { win->bc, win->bc };
-
+            win_range w_range =  { win->bc, win->bc };
             if (a_spec->count)
             {
-                str s = { 
-                    .buffer = a_spec->char_pending,
-                    .len = a_spec->count 
-                };
+                str s = Str(a_spec->char_pending, a_spec->count);
+                change(win, w_range, s);
 
-                undo_node *node = change(win, NULL, w_range, s);
-                node->bc = prev_cursor;
-                if (win->buffer->staged)
-                {
-                    insert_node(&win->buffer->history, win->buffer->staged);
-                }
-                win->buffer->staged = node;
                 win->bc = w_range.first;
 
-                if (m_spec->flags & Follow)
+                if (m_spec->flags & MotionFlags_Follow)
                 {
                     u32 lines_inserted = count_lines(s);
                     if (lines_inserted)
@@ -791,27 +816,9 @@ static void edit(editor_state *state)
                 }
             }
 
-            if (a_spec->m_mod == InsertionChange)
+            if (a_spec->inserted.len > 0)
             {
-                a_spec->inserted.buffer = get_last_append(win);
-                a_spec->m_mod = NoChange;
-            }
-
-            if (a_spec->inserted.len)
-            {
-                undo_node *node = change(win, NULL, w_range, a_spec->inserted);
-                node->bc = prev_cursor;
-                if (win->buffer->staged)
-                {
-                    LIST_INSERT(win->buffer->staged->data, node->data);
-                    insert_node(&win->buffer->history, win->buffer->staged);
-                    win->buffer->staged = 0;
-                }
-                else
-                {
-                    insert_node(&win->buffer->history, node);
-                }
-
+                change(win, w_range, a_spec->inserted);
                 win->bc = w_range.first;
                 u32 lines_inserted = count_lines(a_spec->inserted);
                 if (lines_inserted)
@@ -821,48 +828,38 @@ static void edit(editor_state *state)
                 win->bc.y += lines_inserted;
                 win->bc.x += saturating_sub(last_col(a_spec->inserted), 1);
             }
-        } break;
 
-        case Delete:
-        {
-            win_range w_range = get_cursor_range(win, *m_spec, state->edit_mode);
+            change_mode_(state);
 
-            state->p_buffer.type = paste_type_from_motion(m_spec->motion_type, state->edit_mode);
-
-            undo_node *node = change(win, &state->p_buffer, w_range, a_spec->inserted);
-            node->bc = prev_cursor;
-
-            if (a_spec->m_mod == InsertionChange)
+            if (is_visual(state->edit_mode))
             {
-                a_spec->inserted.buffer = win->buffer->append.text + win->buffer->append.text_len;
-                win->buffer->staged = node;
-                state->edit_mode = Insert;
-                a_spec->action_type = Replace;
-                a_spec->m_mod  = NoChange;
+                win->change |= Render_VisualModeCursorChange;
+                a_spec->action_type = NoAction;
             }
-            else
+            if (state->edit_mode != Insert)
             {
-                insert_node(&win->buffer->history, node);
-                state->edit_mode = Normal;
+                end_undo(win);
             }
-            win->bc = w_range.first;
-
         } break;
 
         case Replace:
         {
-            Assert(state->edit_mode == Normal);
-
-            state->p_buffer.type = paste_type_from_motion(m_spec->motion_type, state->edit_mode);
+            begin_undo(win);
 
             win_range w_range = get_cursor_range(win, *m_spec, state->edit_mode);
+            change(win, w_range, a_spec->inserted);
 
-            undo_node *node = change(win, &state->p_buffer, w_range, a_spec->inserted);
-            node->bc = prev_cursor;
+            win->dc = win->bc = w_range.first;
+            if (is_visual(state->edit_mode))
+            {
+                a_spec->action_type = NoAction;
+            }
 
-            insert_node(&win->buffer->history, node);
-
-            win->bc = w_range.first;
+            change_mode_(state);
+            if (state->edit_mode == Normal)
+            {
+                end_undo(win);
+            }
         } break;
 
         case Paste:
@@ -877,7 +874,6 @@ static void edit(editor_state *state)
                     .end    = state->p_buffer.end,
                     .pieces = get_pieces(&state->p_buffer),
                     .count  = get_count(&state->p_buffer),
-                    .flags  = state->p_buffer.flags,
                 };
 
                 piece piece;
@@ -895,7 +891,6 @@ static void edit(editor_state *state)
                     p_range.count  = 1;
                     p_range.start  = 0;
                     p_range.end    = 0;
-                    p_range.flags  = Edit_None;
                 }
 
                 win_range range;
@@ -986,8 +981,8 @@ static void process_normal(editor_state *state, str s)
         case Ok:
         {
             edit(state);
-            if (state->p_state.command.a_spec.action_type != NoAction || 
-                state->p_state.command.a_spec.m_mod == InsertionChange)
+            command *command = &state->p_state.command;
+            if (command->a_spec.action_type != NoAction || state->edit_mode == Insert)
             {
                 state->prev_command = state->p_state.command;
             }

@@ -1,26 +1,6 @@
 
 #include <utf8proc.h>
 
-const u8 utf8_len_table[] = {
-    // 1  2  3  4  5  6  7  8  9  A  B  C  D  E  F
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 1
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 2
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 3
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 4
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 5
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 6
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 7
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 8
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 9
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // A
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // B
-    0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // C
-    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // D
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, // E
-    4, 4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // F
-};
-
 typedef struct string
 {
     u32 len;
@@ -28,11 +8,52 @@ typedef struct string
     u8 *buffer;
 } string;
 
+static inline string allocate_string(u32 size)
+{
+    string result = 
+    {
+        .len = 0,
+        .capacity = size,
+        .buffer = (u8 *) malloc(sizeof(u8) * size)
+    };
+    return result;
+}
+
+
 typedef struct str
 {
     u32 len;
     u8 *buffer;
 } str;
+
+static inline str Str(u8 *buffer, u32 size);
+
+#define STR_LIT(s) Str((u8 *) (s), sizeof(s) - 1)
+
+
+// #define str8_lit(S)  str8((U8*)(S), sizeof(S) - 1)
+// #define str8_lit_comp(S) {(U8*)(S), sizeof(S) - 1,}
+// #define str8_lit_cstr(S) str8((U8*)(S), sizeof(S))
+// #define str8_varg(S) (int)((S).size), ((S).str)
+// 
+// #define str8_array(S,C) str8((U8*)(S), sizeof(*(S))*(C))
+// #define str8_array_fixed(S) str8((U8*)(S), sizeof(S))
+// #define str8_struct(S) str8((U8*)(S), sizeof(*(S)))
+// 
+// internal String8  str8(U8 *str, U64 size);
+// internal String8  str8_range(U8 *first, U8 *one_past_last);
+// internal String8  str8_zero(void);
+// internal String16 str16(U16 *str, U64 size);
+// internal String16 str16_range(U16 *first, U16 *one_past_last);
+// internal String16 str16_zero(void);
+// internal String32 str32(U32 *str, U64 size);
+// internal String32 str32_range(U32 *first, U32 *one_past_last);
+// internal String32 str32_zero(void);
+// internal String8  str8_cstring(char *c);
+// internal String16 str16_cstring(U16 *c);
+// internal String32 str32_cstring(U32 *c);
+// internal String8  str8_cstring_capped(void *cstr, void *cap);
+// internal String16 str16_cstring_capped(void *cstr, void *cap);
 
 static inline str from_string(string s)
 {
@@ -42,7 +63,7 @@ static inline str from_string(string s)
 
 static inline u32 count_lines(str s)
 {
-    // TODO: Include all 'line' codpoints.
+    // TODO: Include all 'line' codepoints.
     // TODO: Use SIMD
     u32 result = 0;
     for (u32 i = 0; i < s.len; ++i)
@@ -54,39 +75,6 @@ static inline u32 count_lines(str s)
     }
     return result;
 }
-
-
-// This calculates the grapheme length;
-static inline u32 utf8_charlen_unchecked(const u8 *const str, u32 size)
-{
-    u8 c = (u8)(*str);
-    if (c < 0x80)  //&& str[1] < 0x80)
-    {
-        return 1; // ASCII
-    }
-
-    // u32 prev_len = 0;
-    utf8proc_int32_t state = 0;
-
-    utf8proc_int32_t prev_codepoint;
-    utf8proc_ssize_t len = utf8proc_iterate(str, size, &prev_codepoint);
-    while (len < size)
-    {
-        utf8proc_int32_t next_codepoint;
-        utf8proc_iterate(str + len, size - len, &next_codepoint);
-
-        if (str[len] < 0x80 || 
-            utf8proc_grapheme_break_stateful(prev_codepoint, next_codepoint, &state))
-        {
-            return len;
-        }
-
-        len += utf8_len_table[str[len]];
-        prev_codepoint = next_codepoint;
-    }
-    return len;
-}
-
 
 static inline i32 utf8_prev_codepoint(u8 *buffer, u32 pos, utf8proc_int32_t *cp) {
 

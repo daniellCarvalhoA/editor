@@ -18,6 +18,7 @@ typedef struct buffer_cursor
 #include "history.h"
 #include "buffer.h"
 #include "node.h"
+#include "undo.h"
 #include "search.h"
 #include "iter.h"
 #include "piece_list.h"
@@ -119,7 +120,6 @@ typedef struct editor_state
     normal_parse_state p_state;
     command prev_command;
 
-    b32 searching;
 } editor_state;
 
 

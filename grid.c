@@ -35,8 +35,7 @@ static void fill_command_grid(screen *screen, window *win, grid_view grid)
 
 static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mode)
 {
-    if (((screen->change & Render_NoShowSearchHighlight) == 0) && 
-        (win->buffer->changed) && (win->buffer->last_searched_string.len > 0))
+    if ((win->buffer->changed) && (screen->change & Render_ShowSearchHighlight) && (win->buffer->last_searched_string.len > 0))
     {
         win->buffer->num_matches = 0;
         win->buffer->current_match = 0;
@@ -61,7 +60,7 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
 
     u32 top_position = get_position(&iter);
 
-    while (((screen->change & Render_NoShowSearchHighlight) == 0) && 
+    while ((screen->change & Render_ShowSearchHighlight) && 
            (current_match < win->buffer->num_matches) &&
            (win->buffer->matches[current_match] < top_position))
     {
@@ -168,8 +167,7 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
                 }
 
 #if 1
-                if (((screen->change & Render_NoShowSearchHighlight) == 0) && 
-                    (current_match < win->buffer->num_matches)) 
+                if ((screen->change & Render_ShowSearchHighlight) && (current_match < win->buffer->num_matches)) 
                 {
                     u32 match_position = win->buffer->matches[current_match];
                     u32 match_len = win->buffer->match_len;
@@ -282,26 +280,19 @@ static void line_diff(screen *screen, window *win, grid_line old, grid_line new)
                 u8 *cell_data = get_cell_data(new, type_idx, prev_type);
                 if (prev_attr == Reversed)
                 {
-                    write_string(screen, (u8 *) "\x1b[7m", sizeof("\x1b[7m") - 1);
+                    write_string(screen, STR_LIT("\x1b[7m"));
                 }
                 else
                 {
-                    write_string(screen, (u8 *) "\x1b[27m", sizeof("\x1b[27m") - 1);
+                    write_string(screen, STR_LIT("\x1b[27m"));
                 }
-                write_string(screen, cell_data, same_type_seq_diff_length * (prev_type + 1));
+
+                str s = Str(cell_data, same_type_seq_diff_length * (prev_type + 1));
+                write_string(screen, s);
 
                 type_idx = j;
                 prev_type = curr_type;
                 prev_attr = curr_attr;
-
-                // if (curr_attr == Reversed)
-                // {
-                //     write_string(screen, (u8 *) "\x1b[27m", sizeof("\x1b[27m") - 1);
-                // }
-                // else
-                // {
-                //     write_string(screen, (u8 *) "\x1b[7m", sizeof("\x1b[7m") - 1);
-                // }
             }
             j++;
         }
@@ -316,18 +307,18 @@ static void line_diff(screen *screen, window *win, grid_line old, grid_line new)
             u8 *cell_data = get_cell_data(new, type_idx, prev_type);
             if (prev_attr == Reversed)
             {
-                write_string(screen, (u8 *) "\x1b[7m", sizeof("\x1b[7m") - 1);
+                write_string(screen, STR_LIT("\x1b[7m"));
             }
             else
             {
-                write_string(screen, (u8 *) "\x1b[27m", sizeof("\x1b[27m") - 1);
+                write_string(screen, STR_LIT("\x1b[27m"));
             }
-            write_string(screen, cell_data, same_type_seq_diff_length * (prev_type + 1));
 
-            // if (prev_attr == Reversed)
-            // {
-            //     write_string(screen, (u8 *) "\x1b[27m", sizeof("\x1b[27m") - 1);
-            // }
+            str s = Str(cell_data, same_type_seq_diff_length * (prev_type + 1));
+
+
+            write_string(screen, s);
+
         }
     } 
 }
@@ -351,8 +342,8 @@ static void grid_diff(screen *screen, window *win, grid_view old, grid_view new)
         line_diff(screen, win, old_line, new_line); 
         if (i + 1 < win_height)
         {
-            write_string(screen, (u8 *) "\r\n", sizeof("\r\n") - 1);
+            write_string(screen, STR_LIT("\r\n"));
         }
     }
-    write_string(screen, (u8 *) "\x1b[27m", sizeof("\x1b[27m") - 1);
+    write_string(screen, STR_LIT("\x1b[27m"));
 }

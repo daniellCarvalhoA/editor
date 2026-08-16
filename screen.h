@@ -13,7 +13,7 @@ typedef enum
     Render_StatusVisibilityChange = 0x80,
     Render_BufferExchange         = 0x100,
     Render_RedrawBorders          = 0x200,
-    Render_NoShowSearchHighlight  = 0x300,
+    Render_ShowSearchHighlight    = 0x300,
 } render_change;
 
 typedef struct screen
@@ -39,7 +39,7 @@ typedef struct screen
 #define MAX_NUM_WINDOWS 32
 
 static void place_cursor(screen *screen, u32 y, u32 x);
-static void write_string(screen *screen, u8 *s, u32 len);
+static void write_string(screen *screen, str s);
 static void set_color(screen *screen, u32 color);
 static void reset_color(screen *screen);
 static void move_cursor_right(screen *screen, u32 x);
@@ -47,7 +47,4 @@ static void set_cursor_column(screen *screen, u32 x);
 static inline grid_view screen_view(screen *screen);
 static void flush_buffer(screen *screen);
 static void free_screen(screen *screen);
-
-// All writes must be full. No string representing an ansi sequence can 
-// span multiple flush boundaries.
 

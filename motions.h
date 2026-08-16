@@ -17,11 +17,15 @@ typedef enum
 
 typedef enum
 {
-    Exclusive = 0x1,
-    Inclusive = 0x2,
-    Backwards = 0x4,
-    Range     = 0x8,
-    Follow    = 0x100,
+    MotionFlags_Exclusive = 0x1,
+    MotionFlags_Inclusive = 0x2,
+    MotionFlags_Backwards = 0x4,
+    MotionFlags_Range     = 0x8,
+    MotionFlags_Follow    = 0x10,
+    MotionFlags_Visual    = 0x20
+
+    // The following are valid only 
+    
 } motion_flags;
 
 typedef struct

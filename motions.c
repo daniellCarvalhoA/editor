@@ -88,7 +88,7 @@ static void move_by_motion(window *win, motion_spec m_spec)
  
          case Motion_Vertical:
          {
-             if (m_spec.flags & Backwards)
+             if (m_spec.flags & MotionFlags_Backwards)
              {
                  win->bc.y = clamped_add(win->bc.y, quantifier, win->buffer->lcnt);
              }
@@ -102,7 +102,7 @@ static void move_by_motion(window *win, motion_spec m_spec)
  
          case Motion_Horizontal:
          {
-             if (m_spec.flags & Backwards)
+             if (m_spec.flags & MotionFlags_Backwards)
              {
                  win->dc.x = win->bc.x = saturating_sub(win->bc.x, quantifier);
              }
@@ -112,7 +112,7 @@ static void move_by_motion(window *win, motion_spec m_spec)
                     win->buffer,
                     win->bc.y,
                     win->bc.x + quantifier,
-                    (m_spec.flags & Inclusive) == 0);
+                    (m_spec.flags & MotionFlags_Inclusive) == 0);
              }
          } break;
  
@@ -129,7 +129,7 @@ static void move_by_motion(window *win, motion_spec m_spec)
              }
  
              win->bc.y = clamped_add(win->bc.y, quantifier, win->buffer->lcnt);
-             win->dc.x = win->bc.x = clamp_to_length(win->buffer, win->bc.y, UINT32_MAX, (m_spec.flags & Inclusive) == 0);
+             win->dc.x = win->bc.x = clamp_to_length(win->buffer, win->bc.y, UINT32_MAX, (m_spec.flags & MotionFlags_Inclusive) == 0);
          } break;
  
          case Zero:
@@ -145,40 +145,61 @@ static void move_by_motion(window *win, motion_spec m_spec)
  
          case Motion_Search:
          {
-             if (m_spec.flags & Range)
+             if (m_spec.flags & MotionFlags_Range)
              {
                 Assert(m_spec.open_close_index >= 0 && 
                        m_spec.open_close_index < (i32) ArrayCount(open_close_pairs));
                 char_pair pair = open_close_pairs[m_spec.open_close_index];
-                buffer_range range = find_boundary(&win->buffer->iter, pair.open, pair.close, win->bc);
 
-                if (m_spec.flags & Exclusive)
+                iter_range range = range_search(
+                    &win->buffer->iter,
+                    win->bc, 
+                    pair.open,
+                    pair.close);
+
+                // u32 position = get_position(&range.start);
+
+                // win->bc =
+                // win->bc = win->dc
+
+                // if (m_spec.flags &
+                // buffer_range range = 
+                //     find_boundary(&win->buffer->iter, pair.open, pair.close, win->bc);
+                //
+                if (m_spec.flags & MotionFlags_Exclusive)
                 {
-                    range.first.x++;
+                    base_next_cell_(&range.start);
                 }
                 else
-                {
-                    range.one_past_end.x++;
+                {     
+                    base_next_cell_(&range.end);
                 }
 
-                win->bc = win->dc = range.one_past_end;
-                win->vc = range.first;
+                if (m_spec.flags & MotionFlags_Visual)
+                {
+                    base_prev_cell(&range.end);
+                }
+                win->bc = win->dc = get_cursor(&range.end);
+                win->vc = get_cursor(&range.start);
+                //
+                // win->bc = win->dc = range.one_past_end;
+                // win->vc = range.first;
              }
-             else if (m_spec.flags & Backwards)
+             else if (m_spec.flags & MotionFlags_Backwards)
              {
-                 str match_str = { .buffer = m_spec.match_str, .len = m_spec.match_str_len };
-                 win->dc.x = win->bc.x = find_char_back(&win->buffer->iter, match_str, quantifier, win->bc);
-
-                 if (m_spec.flags & Exclusive)
+                 str match_str = Str(m_spec.match_str, m_spec.match_str_len);
+                 win->dc.x = win->bc.x = find_char_back(
+                        &win->buffer->iter, match_str, quantifier, win->bc);
+                 if (m_spec.flags & MotionFlags_Exclusive)
                  {
                      win->dc.x = win->bc.x = win->bc.x + 1;
                  }
              }
              else
              {   
-                 str match_str = { .buffer = m_spec.match_str, .len = m_spec.match_str_len };
+                 str match_str = Str(m_spec.match_str, m_spec.match_str_len);
                  win->dc.x = win->bc.x = find_char(&win->buffer->iter, match_str, quantifier, win->bc);
-                 if (m_spec.flags & Exclusive)
+                 if (m_spec.flags & MotionFlags_Exclusive)
                  {
                      win->dc.x = win->bc.x = saturating_sub(win->bc.x, 1);
                  }
@@ -187,7 +208,12 @@ static void move_by_motion(window *win, motion_spec m_spec)
 
          case Motion_Word:
          {
-             if (m_spec.flags & Backwards)
+             if (m_spec.flags & MotionFlags_Range)
+             {
+                 win->vc = find_word_back(&win->buffer->iter, quantifier, win->bc);
+                 win->dc = win->bc = find_word(&win->buffer->iter, quantifier, win->bc);
+             }
+             else if (m_spec.flags & MotionFlags_Backwards)
              {
                  win->dc = win->bc = find_word_back(&win->buffer->iter, quantifier, win->bc);
              }
@@ -199,7 +225,7 @@ static void move_by_motion(window *win, motion_spec m_spec)
 
          case Motion_Paragraph:
          {
-             if (m_spec.flags & Backwards)
+             if (m_spec.flags & MotionFlags_Backwards)
              {
                  base_iter iter = find_line(&win->buffer->iter, win->bc.y);
                  u32 prev_line_pos = get_position(&iter);
@@ -265,7 +291,7 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
             u32 quantifier = m_spec.motion_quantifier + 1;
             result.first.x = 0;
             result.one_past_end.x = 0;
-            if (m_spec.flags & Backwards)
+            if (m_spec.flags & MotionFlags_Backwards)
             {
                 result.first.y = win->bc.y;
                 result.one_past_end.y = clamped_add(win->bc.y, quantifier, win->buffer->lcnt);
@@ -276,7 +302,7 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
                 result.one_past_end.y = win->bc.y + 1;
             }
 
-            if (m_spec.flags & Exclusive)
+            if (m_spec.flags & MotionFlags_Exclusive)
             {
                 result.one_past_end.y--;
                 result.one_past_end.x = clamp_to_length(win->buffer, win->bc.y, UINT32_MAX, false);
@@ -288,7 +314,7 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
         {
             u32 quantifier = Maximum(1, m_spec.motion_quantifier);
             result.first.y = result.one_past_end.y = win->bc.y;
-            if (m_spec.flags & Backwards)
+            if (m_spec.flags & MotionFlags_Backwards)
             {
                 result.first.x = saturating_sub(win->bc.x, quantifier);
                 result.one_past_end.x = win->bc.x;
@@ -323,7 +349,7 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
         case Motion_Search:
         {
             u32 quantifier = Maximum(1, m_spec.motion_quantifier);
-            if (m_spec.flags & Range)
+            if (m_spec.flags & MotionFlags_Range)
             {
                 Assert(m_spec.open_close_index >= 0 && m_spec.open_close_index < (i32) ArrayCount(open_close_pairs));
 
@@ -331,7 +357,7 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
 
                 result = find_boundary(&win->buffer->iter, pair.open, pair.close, win->bc);
 
-                if (m_spec.flags & Exclusive)
+                if (m_spec.flags & MotionFlags_Exclusive)
                 {
                     result.first.x++;
                 }
@@ -347,7 +373,7 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
                 buffer_cursor bc = { .y = win->bc.y, .x = win->bc.x};
                 str s = { .buffer = m_spec.match_str, .len = m_spec.match_str_len };
                 result.one_past_end.x = find_char(&win->buffer->iter, s, quantifier, bc) + 1;
-                if (m_spec.flags & Exclusive)
+                if (m_spec.flags & MotionFlags_Exclusive)
                 {
                     result.one_past_end.x = saturating_sub(result.one_past_end.x, 1);
                 }
@@ -367,12 +393,12 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
         case Motion_Word:
         {
             u32 quantifier = m_spec.motion_quantifier;
-            if (m_spec.flags & Range)
+            if (m_spec.flags & MotionFlags_Range)
             {
                 result.first = find_word_back(&win->buffer->iter, quantifier, win->bc);
                 result.one_past_end = find_word(&win->buffer->iter, quantifier, win->bc);
             }
-            else if (m_spec.flags & Backwards)
+            else if (m_spec.flags & MotionFlags_Backwards)
             {
                 result.first = find_word_back(&win->buffer->iter, quantifier, win->bc);
                 result.one_past_end = win->bc;
@@ -387,12 +413,12 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
         case Motion_Paragraph:
         {
             u32 quantifier = m_spec.motion_quantifier;
-            if (m_spec.flags & Range)
+            if (m_spec.flags & MotionFlags_Range)
             {
                 result.first = find_prev_paragraph(win, quantifier);
                 result.one_past_end = find_next_paragraph(win, quantifier);
             }
-            else if (m_spec.flags & Backwards)
+            else if (m_spec.flags & MotionFlags_Backwards)
             {
                 result.one_past_end = (struct buffer_cursor) {. x = 0, .y = win->bc.y + 1 };
                 result.first = find_prev_paragraph(win, quantifier);

@@ -1,4 +1,3 @@
-#include <utf8proc.h>
 
 typedef struct 
 {

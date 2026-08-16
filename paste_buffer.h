@@ -11,7 +11,6 @@ typedef struct
     u32 start;                  // 4 bytes;
     u32 end;                    // 4 bytes;
     u32 count;                  // 4 bytes; if count is non zero this is not a shared buffer
-    edit_flags flags;           // 4 bytes;
     union                       // 8 bytes; 
     {
         piece *pieces;

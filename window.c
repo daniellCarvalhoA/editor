@@ -534,45 +534,42 @@ static void draw_borders(screen *screen, window *win)
                              is_in_down |= down_x_points[j] == i;
                          }
  
-                         char *s;
+                         str s;
                          if (is_in_up && is_in_down)
                          {
                              up_index++;
                              down_index++;
-                             s = "┼";
+                             s = STR_LIT("┼");
                          }
                          else if (is_in_up)
                          {
-                             s =  "┴";
+                             s = STR_LIT("┴");
                              up_index++;
                          } 
                          else if (is_in_down)
                          {
-                             s =  "┬";
+                             s = STR_LIT("┬");
                              down_index++;
                          }
                          else
                          {
-                             s =  "─";
+                             s = STR_LIT("─");
                          }
 
-                         u32 s_len = strlen(s);
-
                          grid_type type = U32;
-                         if (s_len <= 3)
+                         if (s.len <= 3)
                          {
-                             type = s_len - 1;
+                             type = s.len - 1;
                          }
 
                          g_line.grid->types[g_line.line_start + i] = type;
                          u8 *data = get_cell_data(g_line, i, type);
                          attr *at = get_cell_attr_(g_line, i);
 
-                         memcpy(data, (void *) s, s_len);
+                         memcpy(data, s.buffer, s.len);
                          *at = Default;
 
-
-                         write_string(screen,  (u8 *) s, s_len);
+                         write_string(screen, s);
                      }
                  }
                  draw_borders(screen, child);
@@ -637,42 +634,41 @@ static void draw_borders(screen *screen, window *win)
                          }
  
                          place_cursor(screen, j, col);
-                         char *s;
+                         str s;
                          if (is_in_left && is_in_right)
                          {
                              left_index++;
                              right_index++;
-                             s =  "┼";
+                             s = STR_LIT("┼");
                          }
                          else if (is_in_left)
                          {
-                             s = "┤";
+                             s = STR_LIT("┤");
                              left_index++;
                          } 
                          else if (is_in_right)
                          {
-                             s =  "├";
+                             s = STR_LIT("├");
                              right_index++;
                          }
                          else
                          {
-                             s =  "│";
+                             s = STR_LIT("│");
                          }
 
-                         u32 s_len = strlen(s);
                          grid_type type = U32;
-                         if (s_len <= 3)
+                         if (s.len <= 3)
                          {
-                             type = s_len - 1;
+                             type = s.len - 1;
                          }
 
                          g_line.grid->types[g_line.line_start + col] = type;
                          u8 *data = get_cell_data(g_line, col, type);
                          attr *at = get_cell_attr_(g_line, col);
 
-                         memcpy(data, (void *) s, s_len);
+                         memcpy(data, s.buffer, s.len);
                          *at = Default;
-                         write_string(screen,  (u8 *) s, s_len);
+                         write_string(screen,  s);
                      }
                 }
                 draw_borders(screen, child);
