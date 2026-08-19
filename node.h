@@ -109,3 +109,13 @@ typedef struct cursor
 } cursor;
 
 
+static segmented_node *allocate_node(piece_list *list);
+static inline void next_cursor(cursor *cursor);
+static void sub_from_cursor(cursor *cursor, u32 count);
+static void add_to_cursor_(cursor *cursor, u32 count);
+static void add_to_cursor(const piece_list *list, cursor *cursor, u32 count);
+static cursor add_to_cursor_by_value(
+    const piece_list *list,
+    const cursor old_cursor, u32 count);
+
+

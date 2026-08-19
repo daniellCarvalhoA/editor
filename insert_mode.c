@@ -95,7 +95,10 @@ static void insert_mode_insert(window *win, str s)
                     state->ins_count += 2;
                     state->del_count = 1;
 
-                    list_piece *lp = PushStruct(&state->insert_mode_arena, list_piece, NoClear());
+                    list_piece *lp = PushStruct(
+                        &state->insert_mode_arena,
+                        list_piece,
+                        NoClear());
                     lp->piece = *curr_piece;
                     INIT_LIST_HEAD(&lp->list);
                     list_add(&lp->list, &state->piece_head);
@@ -172,142 +175,8 @@ static void insert_mode_insert(window *win, str s)
     reset_cursor(list, &list->iter);
 }
 
-#if 0
-static void insert_mode_delete_(window *win)
-{
-    piece_list *list = win->buffer;
-    insert_mode *state = &list->i_state;
-
-    win_cursor prev_cursor; 
-    if (win->bc.x == 0)
-    {
-        if (win->bc.y > 0)
-        {
-            prev_cursor = (struct buffer_cursor) { .y = win->bc.y - 1, .x = get_line_len_(&list->iter, win->bc.y - 1) };
-        }
-        else
-        {
-            return;
-        }
-    }
-    else
-    {
-        prev_cursor = (struct buffer_cursor) { .y = win->bc.y, .x = win->bc.x - 1 };
-    }
-
-    switch (state->state)
-    {
-        case Init:
-        {
-
-            piece_range p_range = {};
-            replace_result rep = range_replace(list, prev_cursor, win->bc, p_range);
-            if (rep.start > 0)
-            {
-                state->state = Deleted;
-            }
-
-            if (!list->staged)
-            {
-                list->staged = allocate_tree_node(&list->history_arena, &list->history);
-                list->staged->bc = win->bc;
-                list->staged->data = NULL;
-            }
-
-            list->staged->data = merge_memory_headers(
-                &list->history,
-                &list->history_arena,
-                rep.undo_header, 
-                list->staged->data);
-
-        } break;
-
-        case Inserted:
-        {
-            base_iter iter = find_cursor(&list->iter, prev_cursor);
-            fix_iter_(&iter);
-            base_iter last_iter = find_cursor(&list->iter, win->bc);
-
-            u32 del_size = position(&last_iter) - position(&iter);
-            u32 del_lcnt = line_number(&last_iter) - line_number(&iter);
-
-            piece *piece = get_piece(&iter);
-            Assert(piece);
-
-            if (piece->size == 1)
-            {
-                undo_memory_header *last = NULL;
-                LIST_POP(list->staged->data, last);
-                Assert(last);
-                undo_once(list, last, NULL);
-                free_undo_memory_block(&list->history_arena, &list->history, last);
-                if (!list->staged->data)
-                {
-                    free_tree_node(&list->history_arena, &list->history, list->staged);
-                    list->staged = NULL;
-                }
-                state->state = Init;
-            }
-            else
-            {
-                piece->size -= del_size;
-                piece->lcnt -= del_lcnt;
-                iter.node->size -= del_size;
-                iter.node->lcnt -= del_lcnt;
-                list->size -= del_size;
-                list->lcnt -= del_lcnt;
-            }
-            list->append.text_len  -= del_size;
-            list->append.num_lines -= del_lcnt;
-        } break;
-
-        case Deleted:
-        {
-            base_iter iter = find_cursor(&list->iter, prev_cursor);
-            fix_iter_(&iter);
-            base_iter last_iter = find_cursor(&list->iter, win->bc);
-            fix_iter(&last_iter);
-
-            u32 del_size = position(&last_iter)    - position(&iter);
-            u32 del_lcnt = line_number(&last_iter) - line_number(&iter);
-
-            piece *piece = get_piece(&iter);
-            Assert(piece);
-
-            if (piece->size == 1)
-            {
-                cursor start_cursor = { .node = iter.node,      .piece_index = iter.piece_idx };
-                cursor end_cursor   = start_cursor;
-                add_to_cursor(list, &end_cursor, 1);
-
-                replace(list, start_cursor, end_cursor, 0, 0);
-
-                list->size -= del_size;
-                list->lcnt -= del_lcnt;
-
-                state->state = Init;
-
-            }
-            else
-            {
-                piece->size -= del_size;
-                piece->lcnt -= del_lcnt;
-                iter.node->size -= del_size;
-                iter.node->lcnt -= del_lcnt;
-                list->size -= del_size;
-                list->lcnt -= del_lcnt;
-            }
-        } break;
-    }
-
-    reset_cursor_(&list->iter);
-    win->dc = win->bc = prev_cursor;
-}
-#endif
-
 static void insert_mode_delete(window *win)
 {
-    // window *win = active_window;
     piece_list *list = win->buffer;
     list->changed_since_last_search = true;
     insert_mode *state   = &list->i_state;
@@ -423,7 +292,10 @@ static void insert_mode_delete(window *win)
                     {
                         sub_from_cursor(&start_cursor, state->del_count);
                     }
-                    cursor end_cursor = add_to_cursor_by_value(list, start_cursor, state->ins_count);
+                    cursor end_cursor = add_to_cursor_by_value(
+                        list,
+                        start_cursor,
+                        state->ins_count);
 
                     list_piece *lp = 0;
                     if (state->del_count)
@@ -434,7 +306,8 @@ static void insert_mode_delete(window *win)
                     // NOTE:This is a hack!!
                     u32 prev_size = list->size;
                     u32 prev_lcnt = list->lcnt;
-                    replace(list, start_cursor, end_cursor, &lp->piece, state->del_count);
+                    replace(
+                        list, start_cursor, end_cursor, &lp->piece, state->del_count);
                     list->size = prev_size - del_size;
                     list->lcnt = prev_lcnt - del_lcnt;
                     clear_insert_state(state);
@@ -478,8 +351,10 @@ static void insert_mode_delete(window *win)
             {
                 if (iter.abs_idx < state->abs_idx)
                 {
-                    list_piece *lp = PushStruct(&state->insert_mode_arena, list_piece, NoClear());
-
+                    list_piece *lp = PushStruct(
+                        &state->insert_mode_arena,
+                        list_piece,
+                        NoClear());
                     lp->piece = *curr_piece;
                     INIT_LIST_HEAD(&lp->list);
                     list_add(&lp->list, &state->piece_head);
@@ -513,7 +388,10 @@ static void insert_mode_delete(window *win)
                 add_to_cursor(list, &start_cursor, 1);
                 if (iter.abs_idx < state->abs_idx)
                 {
-                    list_piece *lp = PushStruct(&state->insert_mode_arena, list_piece, NoClear());
+                    list_piece *lp = PushStruct(
+                        &state->insert_mode_arena,
+                        list_piece,
+                        NoClear());
                     lp->piece = *curr_piece;
                     INIT_LIST_HEAD(&lp->list);
                     list_add(&lp->list, &state->piece_head);
@@ -541,8 +419,10 @@ static void insert_mode_delete(window *win)
                 if (iter.abs_idx < state->abs_idx)
                 {
                     state->abs_idx = iter.abs_idx;
-                    list_piece *lp = PushStruct(&state->insert_mode_arena, list_piece, NoClear());
-
+                    list_piece *lp = PushStruct(
+                        &state->insert_mode_arena,
+                        list_piece,
+                        NoClear());
                     lp->piece = *curr_piece;
                     INIT_LIST_HEAD(&lp->list);
                     list_add(&lp->list, &state->piece_head);
@@ -563,10 +443,6 @@ static void insert_mode_delete(window *win)
     reset_cursor(list, &list->iter);
 
     list->changed = true;
-    list->bot_changed   = win->bc.y + 1;
-
-    // list->size -= del_size;
-
     win->dc.x = win->bc.x - 1;
     win->bc.x = win->dc.x;
 }
@@ -597,7 +473,7 @@ static b32 process_insert(editor_state *state, str s)
 
         case '\r':
         {
-            str new = { .buffer = (u8 *) "\n", .len = sizeof("\n") - 1};
+            str new = STR_LIT("\n"); 
             insert_mode_insert(win, new); 
         } break;
 

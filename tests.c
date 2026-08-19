@@ -33,7 +33,6 @@ static win_cursor rand_cursor(prng *prng, u32 max_x, u32 max_y)
     return result;
 }
 
-
 #include "model.h"
 #include "buffer.c"
 #include "node.c"
@@ -50,7 +49,10 @@ static win_cursor rand_cursor(prng *prng, u32 max_x, u32 max_y)
 #include "normal_test.c"
 #include "insert_mode.c"
 
-static buffer_cursor rand_buffer_cursor_clamped(piece_list *list, prng *prng, buffer_cursor max)
+static buffer_cursor rand_buffer_cursor_clamped(
+    piece_list *list,
+    prng *prng,
+    buffer_cursor max)
 {
     u32 y = rand_range_u32_inclusive(prng, 0, max.y);
     u32 x;

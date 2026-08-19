@@ -873,7 +873,6 @@ static void increase_window_height(screen *screen, window *win)
                         if (child->buffer)
                         {
                             child->buffer->changed = true;
-                            child->buffer->top_changed = child->top_line;
                         }
 
                         set_window_params(child, screen, child->layout);
@@ -941,7 +940,6 @@ static void increase_window_width(screen *screen, window *win)
                         if (child->buffer)
                         {
                             child->buffer->changed = true;
-                            child->buffer->top_changed = child->top_line;
                         }
 
                         set_window_params(child, screen, child->layout);

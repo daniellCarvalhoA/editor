@@ -1,4 +1,3 @@
-
 typedef enum insert_state
 {
     Init, 
@@ -44,11 +43,14 @@ typedef struct piece_list
 
     b32 changed;
     b32 changed_since_last_search;
+
+#if 0
     u32 top_changed;
     u32 bot_changed;
     u32 lines_inserted;
     u32 lines_deleted;
     b32 wrapped;
+#endif
 
     u32 size;  
     u32 lcnt;
@@ -75,8 +77,6 @@ typedef struct piece_list
     // the matches that are kept (if we are not replacing) are the ones 
     // visible on screen;
     str last_searched_string;
-    //u32 last_num_matches;
-    //u32 last_match_len;
     u32 match_len;
     u32 num_matches;
 

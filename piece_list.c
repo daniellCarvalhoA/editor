@@ -837,7 +837,7 @@ static inline void copy_serialized(
     }
 }
 
-static inline void copy_range(cursor start, cursor end, u32 count, piece_slice slice)
+static void copy_range(cursor start, cursor end, u32 count, piece_slice slice)
 {
     if (slice.count > 0)
     {
@@ -869,7 +869,7 @@ static inline void copy_range(cursor start, cursor end, u32 count, piece_slice s
     }
 }
 
-static inline cursor make_space(piece_list *list, cursor start, cursor end, u32 size)
+static cursor make_space(piece_list *list, cursor start, cursor end, u32 size)
 {
     cursor result;
 
@@ -1079,9 +1079,7 @@ static inline cursor make_space(piece_list *list, cursor start, cursor end, u32 
                 left->lcnt += piece.lcnt;
             }
 
-
             left->count = total;
-            // fix_size_and_lines(left);
 
             // free deleted nodes
             segmented_node *after = left->next;
@@ -1166,9 +1164,10 @@ static inline cursor make_space(piece_list *list, cursor start, cursor end, u32 
             segmented_node *new_node;
             for (u32 i = 0; i < num_alloc; ++i)
             {
-                FREELIST_ALLOCATE(new_node,
-                                  list->first_free_node,
-                                  PushStruct(&list->list_arena, segmented_node, NoClear()));
+                FREELIST_ALLOCATE(
+                    new_node,
+                    list->first_free_node,
+                    PushStruct(&list->list_arena, segmented_node, NoClear()));
                 new_node->size = 0;
                 new_node->lcnt = 0;
 
@@ -1293,7 +1292,7 @@ static inline cursor make_space(piece_list *list, cursor start, cursor end, u32 
     return result;
 }
 
-static inline void insert_many(
+static void insert_many(
     piece_list *list,
     cursor at,
     piece_slice *slices,
@@ -1339,12 +1338,7 @@ static inline void insert_many(
     }
 }
 
-static void replace(
-    piece_list *list,
-    cursor start,
-    cursor end,
-    piece *pieces,
-    u32 num_pieces)
+static void replace(piece_list *list, cursor start, cursor end, piece *pieces, u32 num_pieces)
 {
     cursor cursor = make_space(list, start, end, num_pieces);
     piece_slice p_slice[1] = { { .base = pieces, .count = num_pieces } };
@@ -1365,10 +1359,7 @@ static void write_piece_text(piece_list *list, piece_slice p_slice, string *buf)
     }
 }
 
-static piece serialize_piece_range_to(
-    piece_list *a,
-    piece_list *b,
-    piece_slice p_slice)
+static piece serialize_piece_range_to(piece_list *a, piece_list *b, piece_slice p_slice)
 {
     piece result = {};
     result.type = BufferType_Append;
@@ -1401,11 +1392,7 @@ static piece serialize_piece_range_to(
     return result;
 }
 
-static void yank(
-    piece_list *list,
-    p_buffer *buffer,
-    buffer_cursor c0,
-    buffer_cursor c1)
+static void yank(piece_list *list, p_buffer *buffer, buffer_cursor c0, buffer_cursor c1)
 {
     base_iter start = find_cursor(list, &list->iter, c0);
     fix_iter(list, &start);
@@ -1438,12 +1425,8 @@ static void yank(
         if (prev_size < new_size)
         {
             buffer->capacity = buffer->count;
-            buffer->pieces = reallocarray(
-                buffer->pieces,
-                buffer->capacity,
-                sizeof(piece));
+            buffer->pieces = reallocarray(buffer->pieces, buffer->capacity, sizeof(piece));
         }
-
 
         piece_slice p_slice =  { .base = buffer->pieces, .count = buffer->count } ;
         copy_range(start_cursor, end_cursor, buffer->count, p_slice);
@@ -1475,29 +1458,15 @@ static void yank(
         if (prev_size < new_size)
         {
             buffer->text.capacity = buffer->text.len;
-            buffer->text.buffer = reallocarray(
-                buffer->text.buffer, 
-                buffer->text.capacity,
-                sizeof(u8));
+            buffer->text.buffer = reallocarray(buffer->text.buffer, buffer->text.capacity, sizeof(u8));
         }
         
-        copy_serialized(
-            list,
-            start_cursor,
-            start.pos_in_piece,
-            end_cursor,
-            end.pos_in_piece,
-            buffer->text);
+        copy_serialized(list, start_cursor, start.pos_in_piece, end_cursor, end.pos_in_piece, buffer->text);
     }
 
 }
 
-static void replace_range(
-    piece_list *list,
-    base_iter start,
-    base_iter end,
-    piece_slice inserted_pieces,
-    piece_slice undo_buffer)
+static void replace_range(piece_list *list, base_iter start, base_iter end, piece_slice inserted_pieces, piece_slice undo_buffer)
 
 {
     cursor start_cursor = { start.node, start.piece_idx };
@@ -1578,21 +1547,13 @@ static void replace_range(
             end_piece->lcnt -= end.line_in_piece;
         }
 
-        start_cursor = make_space(
-            list,
-            start_cursor,
-            end_cursor,
-            inserted_pieces.count);
+        start_cursor = make_space(list, start_cursor, end_cursor, inserted_pieces.count);
     }
     insert_many(list, start_cursor, p_slice, slice_count);
     reset_cursor(list, &list->iter);
 }
 
-static void range_replace(
-    piece_list *list, 
-    buffer_cursor c0,
-    buffer_cursor c1,
-    piece_slice p_slice)
+static void range_replace(piece_list *list, buffer_cursor c0, buffer_cursor c1, piece_slice p_slice)
 {
     list->changed = true;
 
@@ -1626,10 +1587,7 @@ static void range_replace(
     replace_range(list, start, end, p_slice, undo_buffer);
 }
 
-static void initialize_piece_list(
-    piece_list *list,
-    u8 *original_text,
-    u32 original_text_len)
+static void initialize_piece_list(piece_list *list, u8 *original_text, u32 original_text_len)
 {
     DLIST_INIT(&list->root_sentinel);
     list->size        = 0;
@@ -1974,7 +1932,6 @@ static inline b32 nodes_are_equal(const segmented_node *a, const segmented_node 
     b32 result = (a->count == b->count) && (a->size == b->size) && (a->lcnt == b->lcnt);
     for (u32 i = 0; i < a->count; ++i)
     {
-        // result = result && (a->b_types[i] == b->b_types[i]);
         result = result && pieces_are_equal(a->pieces[i], b->pieces[i]);
     }
     return result;
