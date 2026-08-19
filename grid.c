@@ -35,17 +35,17 @@ static void fill_command_grid(screen *screen, window *win, grid_view grid)
 
 static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mode)
 {
-    if ((win->buffer->changed) && (screen->change & Render_ShowSearchHighlight) && (win->buffer->last_searched_string.len > 0))
-    {
-        win->buffer->num_matches = 0;
-        win->buffer->current_match = 0;
-        search_str(win->buffer, 0, win->buffer->last_searched_string);
-    }
+    // if ((win->buffer->changed) && (screen->change & Render_ShowSearchHighlight) && (win->buffer->last_searched_string.len > 0))
+    // {
+    //     win->buffer->num_matches = 0;
+    //     win->buffer->current_match = 0;
+    //     search_str(win->buffer, win->buffer->last_searched_string);
+    // }
     window *active_window = screen->active_window;
     base_iter iter;
-    b32 not_over = base_init_(win->buffer, LineNumber, &iter);
-    base_advance_by_line(&iter, win->top_line);
-    normalize(&iter);
+    b32 not_over = base_init(win->buffer, LineNumber, &iter);
+    base_advance_by_line(win->buffer, &iter, win->top_line);
+    normalize(win->buffer, &iter);
 
     u32 line   = line_number(&iter);
     u32 width  = get_width(screen, win);
@@ -56,16 +56,18 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
     win_cursor curr_cursor   = win->bc;
     win_range range = make_range(visual_cursor, curr_cursor);
 
+
+#if 0
     u32 current_match = 0;
-
     u32 top_position = get_position(&iter);
+#endif
 
-    while ((screen->change & Render_ShowSearchHighlight) && 
-           (current_match < win->buffer->num_matches) &&
-           (win->buffer->matches[current_match] < top_position))
-    {
-        current_match++;
-    }
+    // while ((screen->change & Render_ShowSearchHighlight) && 
+    //        (current_match < win->buffer->num_matches) &&
+    //        (win->buffer->matches[current_match] < top_position))
+    // {
+    //     current_match++;
+    // }
 
     while (not_over && line < win->top_line + height)
     {
@@ -73,7 +75,7 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
         // skip left scroll region
         while ((i++ < win->cx_offset) && line == line_number(&iter) && not_over)
         {
-            not_over = base_next_cell_(&iter);
+            not_over = base_next_cell_(win->buffer, &iter);
         }
 
         if (line_number(&iter) != line)
@@ -89,10 +91,10 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
 
         u32 col = 0;
         u32 v_col = 0;
-        u32 position = get_position(&iter);
+        u32 position = get_position(win->buffer, &iter);
         while (not_over && col < width)
         {
-            cell_item item   = base_next_cell(&iter);
+            cell_item item = base_next_cell(win->buffer, &iter);
             if (!item.valid)
             {
                 not_over = false;
@@ -110,8 +112,6 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
             {
                 type = item.len - 1;
             }
-
-            // Assert(item.len > 0);
 
             if (item.cell == '\t')
             {
@@ -166,7 +166,7 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
                     }
                 }
 
-#if 1
+#if 0
                 if ((screen->change & Render_ShowSearchHighlight) && (current_match < win->buffer->num_matches)) 
                 {
                     u32 match_position = win->buffer->matches[current_match];
@@ -204,7 +204,7 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
 
         if (col == width)
         {
-            not_over = base_next_line(&iter);
+            not_over = base_next_line(win->buffer, &iter);
         }
         line++;
     }

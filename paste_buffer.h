@@ -19,8 +19,47 @@ typedef struct
     paste_type type;
 } paste_buffer;
 
-static inline void free_paste_buffer(paste_buffer *buffer);
-static inline piece *get_pieces(paste_buffer *buffer);
-static inline u32 get_count(paste_buffer *buffer);
-static inline void reset_paste_buffer(paste_buffer *buffer);
-static inline b32 is_empty(paste_buffer *buffer);
+typedef enum
+{
+    BufferType_Pieces,
+    BufferType_AsStr,
+} p_buffer_type;
+
+typedef struct
+{
+    p_buffer_type type;
+    paste_type p_type;
+    union
+    {
+        struct 
+        {
+            piece_list *buffer;
+            u32 capacity;
+            u32 count;
+            piece *pieces;
+        };
+
+        string text;
+    };
+
+} p_buffer;
+
+static inline void reset_paste_buffer(p_buffer *buffer);
+static inline b32 is_empty(p_buffer *buffer);
+static void free_paste_buffer(p_buffer *buffer);
+
+
+static inline u32 get_allocation_size_in_bytes(p_buffer *buffer)
+{
+    u32 result = 0;
+    if (buffer->type == BufferType_Pieces)
+    {
+        result = sizeof(piece) * buffer->capacity;
+    }
+    else
+    {
+        result = sizeof(u8) * buffer->text.capacity;
+    }
+    return result;
+}
+

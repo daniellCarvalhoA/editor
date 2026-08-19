@@ -1,59 +1,78 @@
 
-static inline b32 is_empty(paste_buffer *buffer)
+static inline b32 is_empty(p_buffer *buffer)
 {
-    b32 result = buffer->buffer == 0;
-    return result;
-}
-static inline void free_paste_buffer(paste_buffer *buffer)
-{
-    history *history = &buffer->buffer->history;
-    memory_arena *history_arena = &buffer->buffer->history_arena;
-    if (buffer->count)
-    {
-        Assert(buffer->pieces);
-        free_memory_block(
-            history_arena,
-            history,
-            (void *) buffer->pieces,
-            buffer->count * sizeof(piece));
-    }
-    else
-    {
-        free_undo_memory_block(history_arena, history, buffer->header);
-    }
-    buffer->buffer = 0;
-    buffer->start = 0;
-    buffer->end = 0;
-    buffer->count = 0;
-    buffer->pieces = 0;
-    buffer->type = 0;
-}
-
-static inline piece *get_pieces(paste_buffer *buffer)
-{
-    piece *result = 0;
-    if (buffer->count > 0)
-    {
-        result = buffer->pieces;
-    }
-    else
-    {
-        result = get_pieces_from_header(buffer->header);
-    }
+    b32 result = (buffer->type == BufferType_Pieces) ?
+                (buffer->count == 0) :
+                (buffer->text.len == 0);
     return result;
 }
 
-static inline u32 get_count(paste_buffer *buffer)
+static void free_paste_buffer(p_buffer *buffer)
 {
-    u32 count = buffer->count;
-    if (!count)
+    if (buffer->type == BufferType_Pieces)
     {
-        count = buffer->header->del_count;
+        if (buffer->pieces)
+        {
+            free(buffer->pieces);
+        }
     }
-    return count;
+    else if (buffer->text.buffer)
+    {
+        free(buffer->text.buffer);
+    }
 }
 
-static inline void reset_paste_buffer(paste_buffer *buffer)
+
+// static inline void free_paste_buffer(paste_buffer *buffer)
+// {
+//     history *history = &buffer->buffer->history;
+//     memory_arena *history_arena = &buffer->buffer->history_arena;
+//     if (buffer->count)
+//     {
+//         Assert(buffer->pieces);
+//         free_memory_block(
+//             history_arena,
+//             history,
+//             (void *) buffer->pieces,
+//             buffer->count * sizeof(piece));
+//     }
+//     else
+//     {
+//         free_undo_memory_block(history_arena, history, buffer->header);
+//     }
+//     buffer->buffer = 0;
+//     buffer->start = 0;
+//     buffer->end = 0;
+//     buffer->count = 0;
+//     buffer->pieces = 0;
+//     buffer->type = 0;
+// }
+//
+// static inline piece *get_pieces(paste_buffer *buffer)
+// {
+//     piece *result = 0;
+//     if (buffer->count > 0)
+//     {
+//         result = buffer->pieces;
+//     }
+//     else
+//     {
+//         result = get_pieces_from_header(buffer->header);
+//     }
+//     return result;
+// }
+//
+// static inline u32 get_count(paste_buffer *buffer)
+// {
+//     u32 count = buffer->count;
+//     if (!count)
+//     {
+//         count = buffer->header->del_count;
+//     }
+//     return count;
+// }
+//
+static inline void reset_paste_buffer(p_buffer *buffer)
 {
     memset(buffer, 0, sizeof(paste_buffer));
 }

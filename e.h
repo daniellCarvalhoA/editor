@@ -11,6 +11,44 @@ typedef struct buffer_cursor
     u32 y;
 } buffer_cursor;
 
+typedef struct buffer_cursor buffer_cursor_diff;
+
+static inline buffer_cursor_diff buffer_diff(buffer_cursor a, buffer_cursor b)
+{
+    Assert(a.y > b.y || ((a.y == b.y) && a.x >= b.x));
+
+    buffer_cursor_diff diff = {};
+    if (a.y > b.y)
+    {
+        diff.y = a.y - b.y;
+        diff.x = b.x;
+    }
+    else
+    {
+        diff.x = a.x - b.x;
+    }
+    return diff;
+}
+
+static inline buffer_cursor buffer_add(buffer_cursor a, buffer_cursor_diff b)
+{
+    buffer_cursor add = {};
+
+    if (b.y == 0)
+    {
+        add.y = a.y;
+        add.x = a.x + b.x;
+    }
+    else
+    {
+        add.y = a.y + b.y;
+        add.x = b.x;
+    }
+
+    return add;
+}
+
+
 #include "math.h"
 #include "command.h"
 #include "memory.h"
@@ -19,7 +57,6 @@ typedef struct buffer_cursor
 #include "buffer.h"
 #include "node.h"
 #include "undo.h"
-#include "search.h"
 #include "iter.h"
 #include "piece_list.h"
 #include "paste_buffer.h"
@@ -115,13 +152,26 @@ typedef struct editor_state
     memory_arena arena;
     screen screen;
     dlist buffers;
-    paste_buffer p_buffer;
+    p_buffer p_buffer;
     mode edit_mode;
     normal_parse_state p_state;
     command prev_command;
-
 } editor_state;
 
+static piece_list *find_buffer(editor_state *state, str filename)
+{
+    piece_list *buffer;
+    list_for_each_entry(buffer, &state->buffers, list)
+    {
+        str filepath = c_str_to_str(buffer->filepath);
+        if ((filepath.len == filename.len) &&
+            (memcmp(filepath.buffer, filename.buffer, filepath.len) == 0))
+        {
+            return buffer;
+        }
+    }
+    return NULL;
+}
 
 #include "insert_mode.h"
 

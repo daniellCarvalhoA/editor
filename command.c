@@ -1,4 +1,3 @@
-
 static inline command_buffer allocate_command_buffer(u32 size)
 {
     command_buffer result = allocate_string(size);
@@ -12,6 +11,8 @@ static void free_command_buffer(command_buffer *buffer)
         free(buffer->buffer);
     }
 }
+
+
 
 typedef enum
 {
@@ -276,14 +277,18 @@ static b32 process_command(editor_state *state)
         Assert(!(p_tree.flags & ParseFlags_Quit));
         Assert(!(p_tree.flags & ParseFlags_Save));
 
-        char *filename_nullterminated = (char *) malloc(p_tree.filename.len + 1);
-        strncpy(filename_nullterminated, (const char *) p_tree.filename.buffer, p_tree.filename.len);
-        filename_nullterminated[p_tree.filename.len] = '\0';
-        
-        // TODO!: Check if buffer is already loaded into memory.
-        piece_list *buffer = create_buffer(&state->arena, filename_nullterminated);
+        piece_list *buffer = find_buffer(state, p_tree.filename); 
+        if (!buffer)
+        {
+            char *filename = (char *) malloc(p_tree.filename.len + 1);
+            strncpy(filename, (const char *) p_tree.filename.buffer, p_tree.filename.len);
+            filename[p_tree.filename.len] = '\0';
+            
+            buffer = create_buffer(&state->arena, filename);
+            list_add_tail(&buffer->list, &state->buffers);
+        }
 
-        list_add_tail(&buffer->list, &state->buffers);
+
 
         list_del(&state->screen.active_window->next_in_buffer);
 
@@ -309,8 +314,7 @@ static b32 process_command(editor_state *state)
         piece_list *buffer = interacting_window->buffer;
         if (p_tree.flags & ParseFlags_Replace)
         {
-            // insert_node(&buffer->history, buffer->staged);
-            // buffer->staged = NULL;
+            end_undo(interacting_window);
             buffer->num_matches = 0;
             buffer->current_match = 0;
             buffer->match_len = 0;
@@ -323,7 +327,10 @@ static b32 process_command(editor_state *state)
             copy_to(p_tree.search_string, &buffer->last_searched_string);
             if (buffer->num_matches > 0)
             {
-                interacting_window->dc = interacting_window->bc = cursor_from_position(&buffer->iter, buffer->matches[buffer->current_match]);
+                interacting_window->dc = interacting_window->bc = cursor_from_position(
+                    buffer,
+                    &buffer->iter,
+                    buffer->matches[buffer->current_match]);
             }
         }
     }
@@ -339,6 +346,37 @@ static b32 process_command(editor_state *state)
     state->screen.command_window->bc.x = 0;
     return result;
 }
+
+
+static void backtrack(window *win)
+{
+    Assert(win);
+    piece_list *buffer = win->buffer;
+    Assert(is_in_middle_of_undo(&buffer->undo_records));
+    end_undo(win);
+
+    record_iter iter = get_records(&buffer->undo_records);
+
+    u32 old_position = position_from_cursor(
+        buffer, &buffer->iter, interacting_window->bc);
+
+    u32 new_position = old_position;
+    if (iter.count != 0)
+    {
+        new_position = iter.position;
+    }
+
+    undo_record *record;
+    while ((record = get_record(&iter)))
+    {
+        undo_once(buffer, record, NULL);
+    }
+
+    buffer_cursor new_cursor = cursor_from_position(
+        buffer, &buffer->iter, new_position);
+    interacting_window->bc = new_cursor;
+}
+
 
 static b32 parse_command(editor_state *state, str input)
 {
@@ -364,39 +402,14 @@ static b32 parse_command(editor_state *state, str input)
             buffer->match_len     = 0;
             buffer->changed       = true;
 
-            if (buffer->replaced)
+            if (is_in_middle_of_undo(&buffer->undo_records))
             {
-                // //Assert(buffer->staged);
-                // //undo_node *node = buffer->staged;
-                // undo_memory_header *head = node->data;
-                //
-                // for (undo_memory_header *header = head; header; header = header->next)
-                // {
-                //     cursor start_cursor = abs_idx_to_cursor_2(buffer, header->abs_idx);
-                //     cursor end_cursor   = abs_idx_to_cursor_2(buffer, header->abs_idx + header->ins_count);
-                //
-                //     piece *pieces = get_pieces_from_header(header);
-                //     for (u32 i = 0; i < header->del_count; ++i)
-                //     {
-                //         piece piece = pieces[i];
-                //         buffer->size = piece.size;
-                //         buffer->lcnt = piece.lcnt;
-                //     }
-                //     replace(buffer, start_cursor, end_cursor, pieces, header->del_count);
-                // }
-                //
-                // free_undo_memory_block(&buffer->history_arena, &buffer->history, head);
-                // // FREELIST_DEALLOCATE(buffer->staged, buffer->history.free_node);
-                // // buffer->staged = NULL;
-                // reset_cursor_(&buffer->iter);
-                //
-                // buffer->replaced = false;
-                // buffer->replace_len = 0;
+                backtrack(interacting_window);
             }
 
             if (buffer->last_searched_string.len > 0)
             {
-                search_str(buffer, 0, buffer->last_searched_string);
+                search_str(buffer, buffer->last_searched_string);
                 buffer->match_len = buffer->last_searched_string.len;
             }
         } break;
@@ -426,84 +439,95 @@ static b32 parse_command(editor_state *state, str input)
                 screen->change |= Render_ShowSearchHighlight;
                 if (tree.flags & ParseFlags_Replace)
                 {
-                    // Assert(buffer->staged);
-                    // buffer->replace_len--;
-                    // u32 removed_size = 0;
-                    // u32 added_size   = 0;
-                    //
-                    // utf8proc_int32_t cp;
-                    // i32 prev = utf8_prev_codepoint(buffer->append.text, buffer->append.text_len, &cp);
-                    // Assert(prev >= 0);
-                    //
-                    // str deleted_str = { 
-                    //     .buffer = buffer->append.text + (u32) prev, 
-                    //     .len = buffer->append.text_len - (u32) prev,
-                    // };
-                    //
-                    // u32 bytes_deleted = deleted_str.len;
-                    // u32 lines_deleted = count_lines(deleted_str);
-                    //
-                    // buffer->append.text_len -= bytes_deleted;
-                    // buffer->append.num_lines -= lines_deleted;
-                    //
-                    // // TODO: Change search by position to search by absolute index, (obtained from buffer->staged);
-                    //
-                    // for (u32 i = 0; i < buffer->num_matches; ++i)
-                    // {
-                    //     // There already is a dummy piece in the deleted places; 
-                    //     // We just need to append.
-                    //     u32 match_position = buffer->matches[i];
-                    //
-                    //     base_iter location = find_position(&buffer->iter, match_position + added_size - removed_size);
-                    //     fix_iter_(&location);
-                    //
-                    //     Assert(location.pos_in_piece == 0);
-                    //
-                    //     piece *piece = get_piece_(&location);
-                    //
-                    //     piece->size -= bytes_deleted;
-                    //     piece->lcnt -= lines_deleted;
-                    //
-                    //     location.node->size -= bytes_deleted;
-                    //     location.node->lcnt -= lines_deleted;
-                    //
-                    //     removed_size += buffer->match_len;
-                    //     added_size += tree.replace_string.len;
-                    // }
-                    //
-                    // buffer->size -= buffer->num_matches * bytes_deleted;
-                    // buffer->lcnt -= buffer->num_matches * lines_deleted;
+                    Assert(is_in_middle_of_undo(&buffer->undo_records));
+                    if (tree.replace_string.len == 0)
+                    {
+                        backtrack(interacting_window);
+                    }
+                    else
+                    {
+                        buffer->replace_len = tree.replace_string.len;
+                        // buffer->replace_len--;
+                        u32 removed_size = 0;
+                        u32 added_size   = 0;
+
+                        utf8proc_int32_t cp;
+                        i32 prev = utf8_prev_codepoint(buffer->append.text, buffer->append.text_len, &cp);
+                        Assert(prev >= 0);
+
+                        str deleted_str = { 
+                            .buffer = buffer->append.text + (u32) prev, 
+                            .len = buffer->append.text_len - (u32) prev,
+                        };
+
+                        u32 bytes_deleted = deleted_str.len;
+                        u32 lines_deleted = count_lines(deleted_str);
+
+                        buffer->append.text_len -= bytes_deleted;
+                        buffer->append.num_lines -= lines_deleted;
+
+                        // TODO: Change search by position to search by absolute index, (obtained from buffer->staged);
+
+                        for (u32 i = 0; i < buffer->num_matches; ++i)
+                        {
+                            // There already is a dummy piece in the deleted places; 
+                            // We just need to append.
+                            u32 match_position = buffer->matches[i];
+
+                            base_iter location = find_position(
+                                buffer,
+                                &buffer->iter,
+                                match_position + added_size - removed_size);
+                            fix_iter_(buffer, &location);
+
+                            Assert(location.pos_in_piece == 0);
+
+                            piece *piece = get_piece(&location);
+
+                            piece->size -= bytes_deleted;
+                            piece->lcnt -= lines_deleted;
+
+                            location.node->size -= bytes_deleted;
+                            location.node->lcnt -= lines_deleted;
+
+                            removed_size += buffer->match_len;
+                            added_size += tree.replace_string.len;
+                        }
+
+                        buffer->size -= buffer->num_matches * bytes_deleted;
+                        buffer->lcnt -= buffer->num_matches * lines_deleted;
+                    }
                 }
                 else
                 {
-                    if (buffer->replaced)
+                    if (is_in_middle_of_undo(&buffer->undo_records))
                     {
-                        // Assert(buffer->staged);
-                        // undo_node *node = buffer->staged;
-                        // undo_memory_header *head = node->data;
-                        // buffer->replaced = false;
-                        // for (undo_memory_header *header = head; header; header = header->next)
-                        // {
-                        //     cursor start_cursor = abs_idx_to_cursor_2(buffer, header->abs_idx);
-                        //     cursor end_cursor   = abs_idx_to_cursor_2(buffer, header->abs_idx + header->ins_count);
-                        //
-                        //     piece *pieces = get_pieces_from_header(header);
-                        //
-                        //     for (u32 i = 0; i < header->del_count; ++i)
-                        //     {
-                        //         piece piece = pieces[i];
-                        //         buffer->size += piece.size;
-                        //         buffer->lcnt += piece.lcnt;
-                        //     }
-                        //
-                        //     replace(buffer, start_cursor, end_cursor, pieces, header->del_count);
-                        // }
-                        //
-                        // free_undo_memory_block(&buffer->history_arena, &buffer->history, head);
-                        // FREELIST_DEALLOCATE(buffer->staged, buffer->history.free_node);
-                        // buffer->staged = NULL;
-                        // // TODO: This should happen inside replace
-                        // reset_cursor_(&buffer->iter);
+                        end_undo(interacting_window);
+
+                        record_iter iter = get_records(&buffer->undo_records);
+
+                        u32 old_position = position_from_cursor(
+                            buffer,
+                            &buffer->iter,
+                            interacting_window->bc);
+
+                        u32 new_position = old_position;
+                        if (iter.count != 0)
+                        {
+                            new_position = iter.position;
+                        }
+
+                        undo_record *record;
+                        while ((record = get_record(&iter)))
+                        {
+                            undo_once(buffer, record, NULL);
+                        }
+
+                        buffer_cursor new_cursor = cursor_from_position(
+                            buffer,
+                            &buffer->iter,
+                            new_position);
+                        interacting_window->bc = new_cursor;
                     }
 
                     if (buffer->num_matches > 0)
@@ -512,11 +536,15 @@ static b32 parse_command(editor_state *state, str input)
                         buffer->num_matches = 0;
                         buffer->current_match = 0;
                     }
-                    search_str(buffer, 0, tree.search_string);
+                    search_str(buffer, tree.search_string);
 
                     if (buffer->num_matches > 0)
                     {
-                        interacting_window->dc = interacting_window->bc = cursor_from_position( &buffer->iter, buffer->matches[buffer->current_match]);
+                        interacting_window->dc = interacting_window->bc = 
+                            cursor_from_position(
+                                buffer, 
+                                &buffer->iter,
+                                buffer->matches[buffer->current_match]);
                     }
 
                 }
@@ -548,38 +576,29 @@ static b32 parse_command(editor_state *state, str input)
             {
                 screen->change |= Render_ShowSearchHighlight;
                 piece_list *buffer = interacting_window->buffer;
-                if (tree.flags & ParseFlags_Replace)
+                if ((tree.flags & ParseFlags_Replace) && (tree.replace_string.len > 0))
                 {
                     buffer->replaced = true;
-                    if (true /* !buffer->staged */)
+                    if (!is_in_middle_of_undo(&buffer->undo_records))
                     {
-                        // piece piece = make_piece(buffer, tree.replace_string);
-                        //
-                        // // Must iterate backwards because otherwise deleting from one position would invalidate the next;
-                        // undo_memory_header *head_header = NULL;
-                        // for (u32 i = 0; i < buffer->num_matches; ++i)
-                        // {
-                        //     u32 match_position = buffer->matches[buffer->num_matches - i - 1];
-                        //     buffer_cursor start = cursor_from_position(&buffer->iter, match_position);
-                        //     buffer_cursor end   = cursor_from_position(&buffer->iter, match_position + buffer->match_len);
-                        //     piece_range p_range = { .pieces = &piece, .count = 1 };
-                        //     replace_result rep = range_replace(buffer, start, end, p_range);
-                        //
-                        //     rep.undo_header->next = head_header;
-                        //     head_header = rep.undo_header;
-                        // }
-                        //
-                        // if (head_header)
-                        // {
-                        //     undo_node *node = allocate_tree_node(&buffer->history_arena, &buffer->history);
-                        //     node->bc = interacting_window->bc;
-                        //     node->data = head_header;
-                        //     buffer->staged = node;
-                        // }
+                        begin_undo(interacting_window);
+                        piece piece = make_piece(buffer, tree.replace_string);
+
+                        for (u32 i = 0; i < buffer->num_matches; ++i)
+                        {
+                            u32 match_position = buffer->matches[buffer->num_matches - i - 1];
+                            // This is stupid!! make range_replace api better, so it can also be passed a position range.
+                            buffer_cursor start = cursor_from_position(
+                                buffer, &buffer->iter, match_position);
+                            buffer_cursor end   = cursor_from_position(
+                                buffer, &buffer->iter, match_position + buffer->match_len);
+                            piece_slice p_slice = { .base = &piece, .count = 1 };
+                            range_replace(buffer, start, end, p_slice);
+                        }
                     }
                     else
                     {
-                        buffer->replace_len++;
+                        buffer->replace_len = tree.replace_string.len;
                         Assert(tree.replace_string.len >= prev_replace_string.len);
 
                         utf8proc_int32_t cp;
@@ -603,18 +622,21 @@ static b32 parse_command(editor_state *state, str input)
 
                         u32 removed_size = 0;
                         u32 added_size = 0;
-                        reset_cursor_(&buffer->iter);
+                        reset_cursor(buffer, &buffer->iter);
                         for (u32 i = 0; i < buffer->num_matches; ++i)
                         {
                             // There already is a dummy piece in the deleted places; 
                             // We just need to append.
                             u32 match_position = buffer->matches[i];
-                            base_iter location = find_position(&buffer->iter, match_position + added_size - removed_size);
-                            fix_iter_(&location);
+                            base_iter location = find_position(
+                                buffer,
+                                &buffer->iter,
+                                match_position + added_size - removed_size);
+                            fix_iter_(buffer, &location);
 
                             Assert(location.pos_in_piece == 0);
 
-                            piece *piece = get_piece_(&location);
+                            piece *piece = get_piece(&location);
 
                             piece->size += bytes_inserted;
                             piece->lcnt += lines_inserted;
@@ -637,11 +659,15 @@ static b32 parse_command(editor_state *state, str input)
                         buffer->num_matches = 0;
                         buffer->current_match = 0;
                     }
-                    search_str(buffer, 0, tree.search_string);
+                    search_str(buffer, tree.search_string);
 
                     if (buffer->num_matches > 0)
                     {
-                        interacting_window->bc = interacting_window->dc = cursor_from_position(&buffer->iter, buffer->matches[buffer->current_match]);
+                        interacting_window->bc = interacting_window->dc =
+                            cursor_from_position(
+                                buffer,
+                                &buffer->iter,
+                                buffer->matches[buffer->current_match]);
                     }
                 }
                 buffer->changed = true;

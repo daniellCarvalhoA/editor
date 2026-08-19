@@ -163,12 +163,19 @@ static inline void begin_undo_sequence(Undo_Records *records, u32 position)
 
         records->last = (u32) ((u8 *) header - records->slices);
         records->last_bot = records->last_top;
+        records->in_process = true;
     }
+}
+
+static b32 is_in_middle_of_undo(Undo_Records *records)
+{
+    b32 result = records->in_process;
+    return result;
 }
 
 static inline void begin_undo(window *win)
 {
-    u32 position = position_from_cursor(&win->buffer->iter, win->bc);
+    u32 position = position_from_cursor(win->buffer, &win->buffer->iter, win->bc);
     begin_undo_sequence(&win->buffer->undo_records, position);
 }
 
@@ -185,6 +192,7 @@ static inline void end_undo_sequence(
     Undo_Records *undo_records,
     Redo_Records *redo_records)
 {
+    undo_records->in_process = false;
     if (undo_records->state == AllocationError)
     {
         // TODO: Choose allocate error handling policy.
@@ -202,7 +210,7 @@ static inline void end_undo_sequence(
         // operations are nops, 
         if (header->count == 0 && !(are_records_empty(undo_records)))
         {
-            undo_records->last_top = undo_records->last;
+            undo_records->last_top = undo_records->last_bot = undo_records->last;
             undo_records->last = header->prev_index;
             undo_records->num_records--;
         }
@@ -333,10 +341,8 @@ static inline void undo_once(
 {
     Assert(undo_record);
 
-    base_iter start = find_abs_idx(&list->iter, undo_record->abs_idx);
-    base_iter end = find_abs_idx(&list->iter, undo_record->abs_idx + undo_record->ins_count);
-
-    // redo_record *record = allocate_undo_record(&list->redo
+    base_iter start = find_abs_idx(list, &list->iter, undo_record->abs_idx);
+    base_iter end = find_abs_idx(list, &list->iter, undo_record->abs_idx + undo_record->ins_count);
 
     cursor start_cursor = { .node = start.node, .piece_index = start.piece_idx };
     cursor end_cursor   = { .node = end.node, .piece_index = end.piece_idx };
@@ -354,11 +360,11 @@ static inline void undo_once(
         redo_record->del_count = undo_record->ins_count;
         redo_record->ins_count = undo_record->del_count;
         piece_slice undo_buffer = get_pieces_from_record(redo_record);
-        copy_range_2(start_cursor, end_cursor, end.abs_idx - start.abs_idx, undo_buffer);
+        copy_range(start_cursor, end_cursor, end.abs_idx - start.abs_idx, undo_buffer);
     }
 
     replace(list, start_cursor, end_cursor, p_slice.base, p_slice.count);
-    reset_cursor_(&list->iter);
+    reset_cursor(list, &list->iter);
 }
 
 static inline void undo(window *win)
@@ -366,7 +372,7 @@ static inline void undo(window *win)
     piece_list *list = win->buffer;
     record_iter iter = get_records(&list->undo_records);
 
-    u32 old_position = position_from_cursor(&list->iter, win->bc);
+    u32 old_position = position_from_cursor(list, &list->iter, win->bc);
 
     u32 new_position = old_position;
     if (iter.count != 0)
@@ -384,13 +390,12 @@ static inline void undo(window *win)
         undo_once(list, record, redo_record);
     }
 
-    buffer_cursor new_cursor = cursor_from_position(&list->iter, new_position);
+    buffer_cursor new_cursor = cursor_from_position(list, &list->iter, new_position);
     win->bc = new_cursor;
 
     end_undo_sequence(&list->redo_records, NULL);
 
 
-    list_invariants(win->buffer);
 }
 
 static inline void redo(window *win)
@@ -398,7 +403,7 @@ static inline void redo(window *win)
     piece_list *list = win->buffer;
     record_iter iter = get_records(&list->redo_records);
 
-    u32 old_position = position_from_cursor(&list->iter, win->bc);
+    u32 old_position = position_from_cursor(list, &list->iter, win->bc);
     u32 new_position = old_position;
     if (iter.count != 0)
     {
@@ -410,15 +415,14 @@ static inline void redo(window *win)
     undo_record *record;
     while ((record = get_record(&iter)))
     {
-        undo_record *undo_record = allocate_undo_record(&list->undo_records, record->del_count);
+        undo_record *undo_record = allocate_undo_record(&list->undo_records, record->ins_count);
         undo_once(list, record, undo_record);
     }
 
-    buffer_cursor new_cursor = cursor_from_position(&list->iter, new_position);
+    buffer_cursor new_cursor = cursor_from_position(list, &list->iter, new_position);
     win->bc = new_cursor;
 
     end_undo_sequence(&list->undo_records, NULL);
-    list_invariants(win->buffer);
 
 }
 

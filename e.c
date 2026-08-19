@@ -5,7 +5,6 @@
 #include "string.c"
 #include "buffer.c"
 #include "node.c"
-#include "search.c"
 #include "iter.c"
 #include "undo.c"
 #include "piece_list.c"
@@ -17,6 +16,7 @@
 #include "motions.c"
 #include "normal.c"
 #include "insert_mode.c"
+
 
 static void render(editor_state *state)
 {

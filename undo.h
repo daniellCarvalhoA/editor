@@ -1,4 +1,6 @@
+
 // NOTE: What if one uses the ring buffer virtual memory trick?
+
 typedef struct 
 {
     u32 count;
@@ -28,7 +30,7 @@ typedef struct
 
 typedef struct undo_record_header redo_record_slice;
 
-#define UNDO_RECORDS_SIZE Kilobytes(8)
+#define UNDO_RECORDS_SIZE Kilobytes(128)
 
 typedef enum
 {
@@ -41,6 +43,7 @@ typedef struct
 {
     undo_state state;
     b32 wrapped;  // This is for debuging purposes;
+    b32 in_process;
     u32 num_records; 
     u32 limit;    // Demarks the end of the slices. This is dynamic, 
     u32 first;    // index into the oldest undo_slice
@@ -182,13 +185,6 @@ static inline undo_record *get_prev_record(Undo_Records *records, undo_record *r
             result = (undo_record *) ((u8 *) record - record->prev_record);
         }
     }
-    return result;
-}
-
-static inline u32 first_record(Undo_Records *records, u32 slice_index)
-{
-    // NOTE: slice index must be valid.
-    u32 result = slice_index + sizeof(undo_record_header);
     return result;
 }
 

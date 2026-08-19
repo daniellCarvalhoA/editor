@@ -1,46 +1,4 @@
 
-typedef struct slice_cursor
-{
-    piece *pieces;
-    u32 cursor;
-    u32 count;
-} slice_cursor;
-
-static inline u32 space_remaining(const slice_cursor *slice_cursor)
-{
-    u32 result = slice_cursor->count - slice_cursor->cursor;
-    return result;
-}
-
-static inline void get_slice_cursor_from_header(
-    slice_cursor *slice_cursor,
-    const undo_memory_header *header)
-{
-    slice_cursor->count  = header->del_count;
-    slice_cursor->pieces = (piece *) (header + 1);
-}
-
-
-static inline void write_start(slice_cursor *slice_cursor, piece piece)
-{
-    *(slice_cursor->pieces) = piece;
-    slice_cursor->cursor++;
-}
-
-static inline void write_last(slice_cursor *slice_cursor, piece piece)
-{
-    *(slice_cursor->pieces + slice_cursor->count - 1) = piece;
-}
-
-static inline void copy_slice(slice_cursor *slice_cursor, const piece *pieces, u32 count)
-{
-    Assert(space_remaining(slice_cursor) >= count);
-
-    piece *dst_pieces = slice_cursor->pieces + slice_cursor->cursor;
-    memcpy(dst_pieces, pieces, sizeof(piece) * count);
-    slice_cursor->cursor += count;
-}
-
 typedef enum insert_state
 {
     Init, 
@@ -74,33 +32,6 @@ typedef struct insert_mode
 
 struct base_iter;
 
-//typedef enum
-//{
-    //Edit_None  = 0x0,
-    //Edit_Left  = 0x1,
-    //Edit_Right = 0x2,
-    //Edit_Both  = 0x4,
-//} edit_flags;
-
-typedef struct
-{
-    u32 count;
-    piece *pieces;
-    u32 start;
-    u32 end;
-} piece_range;
-
-typedef struct
-{
-    u32 count;
-    union {
-        undo_memory_header *undo_header;
-        piece *pieces;
-    };
-    u32 start;
-    u32 end;
-} replace_result;
-
 typedef struct piece_list
 {
     memory_arena list_arena;
@@ -130,16 +61,11 @@ typedef struct piece_list
     memory_arena insert_state_arena;
     insert_mode i_state;
 
-    memory_arena history_arena;
-    history history;
-
     memory_arena undo_arena;
     Undo_Records undo_records;
 
     memory_arena redo_arena;
     Redo_Records redo_records;
-
-    // undo_node *staged;
 
     u32 num_windows;
     dlist window_sentinel;
@@ -176,14 +102,16 @@ typedef struct
     piece piece;
 } iter;
 
+static buffer_cursor cursor_from_position(piece_list *list, base_iter *last_location, u32 position);
+static u32 position_from_cursor(piece_list *list, base_iter *last_location, buffer_cursor bc);
+static base_iter find_abs_idx(piece_list *list, base_iter *last_location, u32 abs_idx);
+static void replace(piece_list *list, cursor start, cursor end, piece *pieces, u32 num_pieces);
+static base_iter find_cursor(piece_list *list, base_iter *last_location, buffer_cursor bc);
+static void copy_range(cursor start, cursor end, u32 count, piece_slice slice);
 
+#if TESTS
 static inline void list_invariants(piece_list *list);
-static inline buffer_cursor cursor_from_position(base_iter *last_location, u32 position);
-static inline u32 position_from_cursor(base_iter *last_location, buffer_cursor bc);
-static inline base_iter find_abs_idx(base_iter *last_location, u32 abs_idx);
-static inline void replace(piece_list *list, cursor start, cursor end, piece *pieces, u32 num_pieces);
-static inline base_iter find_cursor(base_iter *last_location, buffer_cursor bc);
-static inline void copy_range_2(cursor start, cursor end, u32 count, piece_slice slice);
+#endif
 
 static void clear_insert_state(insert_mode *mode)
 {
@@ -201,52 +129,6 @@ static inline void initialize_insert_state(insert_mode *mode)
     clear_insert_state(mode);
 }
 
-static b32 freelist_sanity_check(piece_list *list)
-{
-    b32 result = true;
-
-    if (list)
-    {
-        segmented_node *free = list->first_free_node;
-        if (free)
-        {
-            temporary_memory tmp = begin_temporary_memory(&list->list_arena);
-
-            u32 num_nodes = 1;
-
-            segmented_node **first_node = PushStruct(&list->list_arena, segmented_node *, NoClear());
-            *first_node = &list->root_sentinel;
-
-            for (segmented_node *node = list->root_sentinel.next; 
-                node != &list->root_sentinel;
-                node = node->next, num_nodes++)
-            {
-                segmented_node **new_node = PushStruct(&list->list_arena, segmented_node *, NoClear());
-                *new_node = node;
-            }
-
-            u32 not_found = true;
-            for (segmented_node *node = list->first_free_node; node && not_found; node = node->next)
-            {
-                for (u32 i = 0; i < num_nodes; ++i)
-                {
-                    segmented_node *n = first_node[i];
-                    if (n == node)
-                    {
-                        result = false;
-                        not_found = false;
-
-                        break;
-                    }
-                }
-            }
-            end_temporary_memory(tmp);
-        }
-    }
-
-    return result;
-}
-
 static inline void free_piece_list(piece_list *list)
 {
     if (list->matches)
@@ -255,7 +137,6 @@ static inline void free_piece_list(piece_list *list)
     }
     // NOTE: Order matters!! list is bottstraped onto list_arena.
     free_arena(&list->insert_state_arena);
-    free_arena(&list->history_arena);
     free_arena(&list->list_arena);
 }
 

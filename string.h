@@ -154,3 +154,10 @@ static inline u32 last_col(str s)
     return result;
 }
 
+static str c_str_to_str(char *s)
+{
+    u32 len = strlen(s);
+    str result = { .len = len, .buffer = (u8 *)s };
+    return result;
+}
+

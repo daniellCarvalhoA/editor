@@ -14,7 +14,9 @@ static inline void pop(command_buffer *buffer)
 {
     if (buffer->len > 0)
     {
-        buffer->len--;
+        utf8proc_int32_t cp;
+        buffer->len = utf8_prev_codepoint(buffer->buffer, buffer->len, &cp);
+        Assert(cp);
     }
 }
 

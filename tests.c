@@ -37,7 +37,6 @@ static win_cursor rand_cursor(prng *prng, u32 max_x, u32 max_y)
 #include "model.h"
 #include "buffer.c"
 #include "node.c"
-#include "search.c"
 #include "iter.c"
 #include "piece_list.c"
 #include "grid.c"
@@ -248,7 +247,7 @@ static void free_editor(editor_state *state)
     free_arena(&state->arena);
 }
 
-// TST(replace_sound)
+TEST(replace_sound)
 void replace_sound(prng *prng)
 {
     piece_list *list = rand_list(prng);
@@ -256,43 +255,13 @@ void replace_sound(prng *prng)
     free_piece_list(list);
 }
 
-TEST(replace_sound_2)
-void replace_sound_2(prng *prng)
-{
-    piece_list *list = rand_list_2(prng);
-    list_invariants(list);
-    free_piece_list(list);
-}
-
-
-// // TST(replace_against_model)
-// void replace_against_model(prng *p)
-// {
-//     prng clone = clone_prng(p);
-//
-//     model *m = rand_model(p);
-//     piece_list *list = rand_list(&clone);
-//
-//     Assert(list->size == m->s.len);
-//
-//     u8 *buf = malloc(sizeof(u8) * list->size);
-//
-//     write_to_buffer(list, buf, list->size);
-//
-//     Assert(strncmp((const char *) buf, (const char *) m->s.buffer, list->size) == 0);
-//
-//     free(buf);
-//     free_piece_list(list);
-//     free_arena(&m->arena);
-// }
-
 TEST(replace_against_model)
 void replace_against_model(prng *p)
 {
     prng clone = clone_prng(p);
 
     model *m = rand_model(p);
-    piece_list *list = rand_list_2(&clone);
+    piece_list *list = rand_list(&clone);
 
     Assert(list->size == m->s.len);
 
@@ -313,7 +282,7 @@ void undo_redo_test(prng *prng)
     screen screen = {};
     initialize_screen(&screen);
     window *win = create_window(&screen, LeafBuffer, 0);
-    piece_list *list = rand_list_2(prng);
+    piece_list *list = rand_list(prng);
     map_buffer_to_window(list, win);
 
     u32 num_reversible_edits = rand_range_u32_inclusive(prng, 1, MAX_UNDO_REDO_SEQ);
@@ -329,7 +298,7 @@ void undo_redo_test(prng *prng)
         begin_undo_sequence(&list->undo_records, 0);
         for (u32 j = 0; j < num_compound_undo_seq; ++j)
         {
-            rand_replace_2(list, prng);
+            rand_replace(list, prng);
         }
         end_undo_sequence(&list->undo_records, &list->redo_records);
 
@@ -347,18 +316,21 @@ void undo_redo_test(prng *prng)
         u8 before[list->size];
         write_to_buffer(list, before, list->size);
 
-        for (u32 i = 0; i < num_actual_reversible_edits; undo(win), ++i);
-        if (list->redo_records.num_records == num_actual_reversible_edits) 
+        for (u32 j = 0; j < 2; ++j)
         {
-            for (u32 i = 0; i < num_actual_reversible_edits; redo(win), ++i);
+            for (u32 i = 0; i < num_actual_reversible_edits; undo(win), ++i);
+            if (list->redo_records.num_records == num_actual_reversible_edits) 
+            {
+                for (u32 i = 0; i < num_actual_reversible_edits; redo(win), ++i);
 
-            u8 after[list->size];
+                u8 after[list->size];
 
-            write_to_buffer(list, after, list->size);
+                write_to_buffer(list, after, list->size);
 
-            Assert(size_before == list->size);
-            Assert(lcnt_before == list->lcnt);
-            Assert(strncmp((const char *) before, (const char *) after, list->size) == 0);
+                Assert(size_before == list->size);
+                Assert(lcnt_before == list->lcnt);
+                Assert(strncmp((const char *) before, (const char *) after, list->size) == 0);
+            }
         }
     }
 
@@ -373,7 +345,7 @@ void undo_test(prng *prng)
     screen screen = {};
     initialize_screen(&screen);
     window *win = create_window(&screen, LeafBuffer, 0);
-    piece_list *list = rand_list_2(prng);
+    piece_list *list = rand_list(prng);
 
     map_buffer_to_window(list, win);
 
@@ -393,15 +365,13 @@ void undo_test(prng *prng)
         begin_undo_sequence(&list->undo_records, 0);
         for (u32 j = 0; j < num_compound_undo_seq; ++j)
         {
-            rand_replace_2(list, prng);
+            rand_replace(list, prng);
         }
         end_undo_sequence(&list->undo_records, &list->redo_records);
         if (last_top == get_last_record_top(&list->undo_records))
         {
             num_actual_reversible_edits--;
         }
-
-
     }
 
     if (num_actual_reversible_edits <= list->undo_records.num_records)
@@ -427,116 +397,13 @@ void undo_test(prng *prng)
 }
 
 
-
-// TST(undo_test)
-// void undo_test(prng *prng)
-// {
-//     screen screen = {};
-//     initialize_screen(&screen);
-//     window *win = create_window(&screen, LeafBuffer, 0);
-//     piece_list *list = rand_list(prng);
-//
-//     map_buffer_to_window(list, win);
-//
-//     // u32 num_pieces_before = list->num_pieces;
-//     u32 size_before = list->size;
-//     u32 lcnt_before = list->lcnt;
-//
-//     u8 before[list->size];
-//     write_to_buffer(list, before, list->size);
-//
-//     u32 num_reversible_edits = rand_range_u32_inclusive(prng, 1, MAX_UNDO_REDO_SEQ);
-//
-//     for (u32 i = 0; i < num_reversible_edits; ++i)
-//     {
-//         undo_node *node = allocate_tree_node(&list->history_arena, &list->history);
-//         replace_result rep = rand_replace(list, prng);
-//         if (rep.undo_header)
-//         {
-//             node->data = rep.undo_header;
-//             insert_node(&list->history, node);
-//         }
-//         else
-//         {
-//             num_reversible_edits = i;
-//             break;
-//         }
-//     }
-//
-//     for (u32 i = 0; i < num_reversible_edits; undo(win), ++i);
-//
-//     u8 after[list->size];
-//
-//     write_to_buffer(list, after, list->size);
-//
-//     Assert(size_before == list->size);
-//     Assert(lcnt_before == list->lcnt);
-//     Assert(strncmp((const char *) before, (const char *) after, list->size) == 0);
-//
-//     list_invariants(list);
-//     free_piece_list(list);
-//     free_screen(&screen);
-// }
-
-// TST(undo_redo)
-// void undo_redo(prng *prng)
-// {
-//     screen screen = {};
-//     initialize_screen(&screen);
-//     window *win = create_window(&screen, LeafBuffer, 0);
-//     piece_list *list = rand_list(prng);
-//
-//     map_buffer_to_window(list, win);
-//
-//     u32 num_reversible_edits = rand_range_u32_inclusive(prng, 1, MAX_UNDO_REDO_SEQ);
-//
-//     for (u32 i = 0; i < num_reversible_edits; ++i)
-//     {
-//         undo_node *node = allocate_tree_node(
-//             &list->history_arena,
-//             &list->history);
-//         replace_result rep = rand_replace(list, prng);
-//         if (rep.undo_header)
-//         {
-//             node->data = rep.undo_header;
-//             insert_node(&list->history, node);
-//         }
-//         else
-//         {
-//             num_reversible_edits = i;
-//             break;
-//         }
-//     }
-//
-//     u32 size_before = list->size;
-//     u32 lcnt_before = list->lcnt;
-//
-//     u8 before[list->size];
-//     write_to_buffer(list, before, list->size);
-//
-//     for (u32 i = 0; i < num_reversible_edits; undo(win), ++i);
-//     for (u32 i = 0; i < num_reversible_edits; redo(win), ++i);
-//
-//     u8 after[list->size];
-//
-//     write_to_buffer(list, after, list->size);
-//
-//     Assert(size_before == list->size);
-//     Assert(lcnt_before == list->lcnt);
-//     Assert(strncmp((const char *) before, (const char *) after, list->size) == 0);
-//
-//     list_invariants(list);
-//     free_piece_list(list);
-//     free_screen(&screen);
-// }
-
 TEST(search_string)
 void search_string(prng *prng)
 {
     screen screen = {};
     initialize_screen(&screen);
     window *win = create_window(&screen, LeafBuffer, 0);
-    piece_list *list = rand_list_2(prng);
+    piece_list *list = rand_list(prng);
     map_buffer_to_window(list, win);
 
     INIT_STACK_STRING(s, MAX_STRING_LEN);
@@ -547,20 +414,23 @@ void search_string(prng *prng)
 
     piece piece = make_piece(list, from_string(s));
 
-    piece_range p_range = { .pieces = &piece, .count = 1 };
+    piece_slice p_slice = { .base = &piece, .count = 1 };
 
     buffer_cursor bc = rand_buffer_cursor(list, prng);
 
-    range_replace(list, bc, bc, p_range);
+    range_replace(list, bc, bc, p_slice);
 
-    search_str(list, 0, from_string(s));
+    search_str(list, from_string(s));
 
     b32 found = false;
 
     for (u32 i = 0; i < list->num_matches; ++i)
     {
         u32 test_position = list->matches[i];
-        buffer_cursor test_cursor = cursor_from_position(&list->iter, test_position);
+        buffer_cursor test_cursor = cursor_from_position(
+            list,
+            &list->iter,
+            test_position);
         found |= (test_cursor.x == bc.x && test_cursor.y == bc.y);
     }
 
@@ -575,14 +445,14 @@ void search_string_2(prng *prng)
     screen screen = {};
     initialize_screen(&screen);
     window *win = create_window(&screen, LeafBuffer, 0);
-    piece_list *list = rand_list_2(prng);
+    piece_list *list = rand_list(prng);
     map_buffer_to_window(list, win);
 
     buffer_range br = rand_buffer_range(list, prng);
 
-    base_iter iter = find_cursor(&list->iter, br.first);
+    base_iter iter = find_cursor(list, &list->iter, br.first);
     u32 start_position = position(&iter);
-    iter = find_cursor(&list->iter, br.one_past_end);
+    iter = find_cursor(list, &list->iter, br.one_past_end);
     u32 end_position = position(&iter);
 
     if (start_position == end_position)
@@ -594,24 +464,26 @@ void search_string_2(prng *prng)
     }
     Assert(end_position >= start_position);
      
+
+    p_buffer p_buffer = {};
+    yank(list, &p_buffer, br.first, br.one_past_end);
+
     string s_string = {};
-    s_string.capacity = end_position - start_position;
-    s_string.buffer = (u8 *) malloc(sizeof(u8) * s_string.capacity);
-
-    replace_result rep = yank_(list, br.first, br.one_past_end);
-
-    piece_range p_range = {
-        .count = rep.count,
-        .pieces = rep.pieces,
-        .start = rep.start,
-        .end = rep.end,
-    };
-
-    write_piece_text(list, p_range, &s_string);
+    if (p_buffer.type == BufferType_AsStr)
+    {
+        s_string = p_buffer.text;
+    }
+    else
+    {
+        s_string.capacity = end_position - start_position;
+        s_string.buffer = (u8 *) malloc(sizeof(u8) * s_string.capacity);
+        piece_slice p_slice = { .base = p_buffer.pieces, .count = p_buffer.count };
+        write_piece_text(p_buffer.buffer, p_slice, &s_string);
+    }
 
     Assert(s_string.len == s_string.capacity);
 
-    search_str(list, 0, from_string(s_string));
+    search_str(list, from_string(s_string));
 
     b32 found = false;
 
@@ -624,200 +496,13 @@ void search_string_2(prng *prng)
     Assert(found);
     free_piece_list(list);
     free_screen(&screen);
+    free_paste_buffer(&p_buffer);
 
-    free(s_string.buffer);
-
-}
-#if 0
-TST(insert_mode_insert_replace)
-void insert_mode_insert_replace(prng *p)
-{
-    prng clone = clone_prng(p);
-
-    screen screen = {};
-    initialize_screen(&screen);
-
-    piece_list *list_a = rand_list(p);
-    window *win_a = create_window(&screen, LeafBuffer, 0);
-    map_buffer_to_window(list_a, win_a);
-
-    INIT_STACK_STRING(text, MAX_STRING_LEN);
-    rand_ascii_string(&text, p, 1, MAX_STRING_LEN);
-
-    u32 cy = rand_range_u32_inclusive(p, 0, list_a->lcnt);
-    u32 cx = rand_range_u32_inclusive(p, 0, MAX_LINE_LEN);
-
-    motion_spec m_spec = {
-        .motion_type = Motion_Vertical,
-        .motion_quantifier = cy,
-        .flags = Backwards | Exclusive,
-        .open_close_index = -1
-    };
-    move_by_motion(win_a, m_spec);
-
-    m_spec.motion_type = Motion_Horizontal;
-    m_spec.motion_quantifier = cx;
-    m_spec.flags = Exclusive;
-
-    move_by_motion(win_a, m_spec);
-
-    buffer_cursor bc = win_a->bc;
-    win_cursor start_cursor = rand_buffer_cursor_clamped(list_a, p, win_a->bc);
-
+    if (p_buffer.type != BufferType_AsStr)
     {
-        delete_insert_mode_(win_a, start_cursor);
-
-        insert_insert_mode_(win_a, text);
-        commit_undo(list_a);
-        // commit_insert_mode_undo(list_a);
+        free(s_string.buffer);
     }
-
-    piece_list *list_b = rand_list(&clone);
-    window *win_b = create_window(&screen, LeafBuffer, 0);
-    map_buffer_to_window(list_b, win_b);
-    win_b->bc = bc;
-
-    undo_node *node = allocate_tree_node(&list_b->history_arena, &list_b->history);
-    node->bc = win_b->bc;
-    piece piece = make_piece(list_b, from_string(text));
-    piece_range p_range = { .pieces = &piece, .count = 1 };
-    replace_result rep = range_replace(list_b, start_cursor, bc, p_range);
-
-    node->data = rep.undo_header;
-    insert_node(&list_b->history, node);
-
-    b32 equal_lists = lists_are_equal(list_a, list_b);
-    Assert(equal_lists);
-    free_screen(&screen);
-    free_piece_list(list_a);
-    free_piece_list(list_b);
 }
-
-TST(insert_mode_insert_delete_iso)
-void insert_mode_insert_delete_iso(prng *p)
-{
-    prng clone = clone_prng(p);
-
-    screen screen = {};
-    initialize_screen(&screen);
-
-    piece_list *list_a = rand_list(p);
-    window *win_a = create_window(&screen, LeafBuffer, 0);
-    map_buffer_to_window(list_a, win_a);
-
-    INIT_STACK_STRING(text, MAX_STRING_LEN);
-    rand_ascii_string(&text, p, 1, MAX_STRING_LEN);
-
-    u32 cy = rand_range_u32_inclusive(p, 0, list_a->lcnt);
-    u32 cx = rand_range_u32_inclusive(p, 0, MAX_LINE_LEN);
-    {
-        Assert(win_a->bc.y == 0);
-
-        motion_spec m_spec = {
-            .motion_type = Motion_Vertical,
-            .motion_quantifier = cy,
-            .flags = Backwards | Exclusive,
-            .open_close_index = -1
-        };
-        move_by_motion(win_a, m_spec);
-
-        m_spec.motion_type = Motion_Horizontal;
-        m_spec.motion_quantifier = cx;
-        m_spec.flags = Exclusive;
-
-        move_by_motion(win_a, m_spec);
-
-        win_cursor prev_cursor = win_a->bc;
-
-        insert_insert_mode_(win_a, text);
-        delete_insert_mode_(win_a, prev_cursor);
-        commit_insert_mode_undo(list_a);
-    }
-
-    piece_list *list_b = rand_list(&clone);
-    window *win_b = create_window(&screen, LeafBuffer, 0);
-    map_buffer_to_window(list_b, win_b);
-
-    b32 equal_lists = lists_are_equal(list_a, list_b);
-    Assert(equal_lists);
-    free_screen(&screen);
-    free_piece_list(list_a);
-    free_piece_list(list_b);
-}
-
-// TST(insert_mode_seq_simple)
-void insert_mode_seq_simple(prng *p)
-{
-    prng clone = clone_prng(p);
-
-    screen screen = {};
-    initialize_screen(&screen);
-
-    piece_list *list_a = rand_list(p);
-    window *win_a = create_window(&screen, LeafBuffer, 0);
-    map_buffer_to_window(list_a, win_a);
-
-    INIT_STACK_STRING(text, MAX_STRING_LEN);
-    rand_ascii_string(&text, p, 1, MAX_STRING_LEN);
-
-    u32 cy = rand_range_u32_inclusive(p, 0, list_a->lcnt);
-    u32 cx = rand_range_u32_inclusive(p, 0, MAX_LINE_LEN);
-    {
-        Assert(win_a->bc.y == 0);
-
-        motion_spec m_spec = {
-            .motion_type = Motion_Vertical,
-            .motion_quantifier = cy,
-            .flags = Backwards | Exclusive,
-            .open_close_index = -1
-        };
-        move_by_motion(win_a, m_spec);
-
-        m_spec.motion_type = Motion_Horizontal;
-        m_spec.motion_quantifier = cx;
-        m_spec.flags = Exclusive;
-
-        move_by_motion(win_a, m_spec);
-
-        insert_insert_mode(win_a, text);
-        commit_insert_mode_undo(list_a);
-    }
-
-    piece_list *list_b = rand_list(&clone);
-    window *win_b = create_window(&screen, LeafBuffer, 0);
-    map_buffer_to_window(list_b, win_b);
-    {
-        motion_spec m_spec = {
-            .motion_type = Motion_Vertical,
-            .motion_quantifier = cy,
-            .flags = Backwards | Exclusive,
-            .open_close_index = -1
-        };
-        move_by_motion(win_b, m_spec);
-
-        m_spec.motion_type = Motion_Horizontal;
-        m_spec.motion_quantifier = cx;
-        m_spec.flags = Exclusive;
-
-        move_by_motion(win_b, m_spec);
-
-        undo_node *node = allocate_tree_node(&list_b->history_arena, &list_b->history);
-        node->bc = win_b->bc;
-
-        piece piece = make_piece(list_b, from_string(text));
-        piece_range p_range = { .pieces = &piece, .count = 1 };
-        replace_result rep = range_replace(list_b, win_b->bc, win_b->bc, p_range);
-        node->data = rep.undo_header;
-        insert_node(&list_b->history, node);
-    }
-
-    b32 equal_lists = lists_are_equal(list_a, list_b);
-    Assert(equal_lists);
-    free_screen(&screen);
-    free_piece_list(list_a);
-    free_piece_list(list_b);
-}
-#endif
 
 TEST(insert_mode_seq)
 void insert_mode_seq(prng *p)
@@ -836,7 +521,7 @@ void insert_mode_seq(prng *p)
     initialize_screen(&screen);
 
 
-    piece_list *list_a = rand_list_2(p);
+    piece_list *list_a = rand_list(p);
     window *win_a = create_window(&screen, LeafBuffer, 0);
     map_buffer_to_window(list_a, win_a);
 
@@ -865,7 +550,7 @@ void insert_mode_seq(prng *p)
         end_undo(win_a);
     }
 
-    piece_list *list_b = rand_list_2(&clone);
+    piece_list *list_b = rand_list(&clone);
     window *win_b = create_window(&screen, LeafBuffer, 0);
     map_buffer_to_window(list_b, win_b);
     {
@@ -896,7 +581,7 @@ void insert_mode_seq(prng *p)
                 p_slice.base = &piece;
                 p_slice.count = 1;
             }
-            range_replace_2(list_b, seq->min, seq->max, p_slice);
+            range_replace(list_b, seq->min, seq->max, p_slice);
         }
         end_undo(win_b);
     }

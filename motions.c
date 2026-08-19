@@ -1,7 +1,7 @@
-static inline u32 clamp_to_length(piece_list *list, const u32 cy, const u32 cx, b32 exclusive)
+static u32 clamp_to_length(piece_list *list, const u32 cy, const u32 cx, b32 exclusive)
 {
     u32 result = cx;
-    u32 line_len = get_line_len_(&list->iter, cy);
+    u32 line_len = get_line_len(list, &list->iter, cy);
     if (cx >= line_len)
     {
         result = line_len;
@@ -13,21 +13,20 @@ static inline u32 clamp_to_length(piece_list *list, const u32 cy, const u32 cx, 
     return result;
 }
 
-
 static inline buffer_cursor find_next_paragraph(window *win, u32 count) 
 {
     // TODO! Make this work for all types of newline characters;
     buffer_cursor result = {};
-    base_iter iter = find_line(&win->buffer->iter, win->bc.y + 1);
-    u32 prev_line_pos = get_position(&iter);
+    base_iter iter = find_line(win->buffer, &win->buffer->iter, win->bc.y + 1);
+    u32 prev_line_pos = get_position(win->buffer, &iter);
     for (;;)
     {
-        if (!base_next_line(&iter))
+        if (!base_next_line(win->buffer, &iter))
         {
             break;
         }
 
-        u32 curr_line_pos = get_position(&iter);
+        u32 curr_line_pos = get_position(win->buffer, &iter);
         if (prev_line_pos + 1 == curr_line_pos)
         {
             count--;
@@ -49,16 +48,16 @@ static inline buffer_cursor find_prev_paragraph(window *win, u32 count)
 {
     // TODO! Make this work for all types of newline characters;
     buffer_cursor result = { .x = UINT32_MAX, .y = UINT32_MAX };
-    base_iter iter = find_line(&win->buffer->iter, win->bc.y);
-    u32 prev_line_pos = get_position(&iter);
+    base_iter iter = find_line(win->buffer, &win->buffer->iter, win->bc.y);
+    u32 prev_line_pos = get_position(win->buffer, &iter);
     for (;;)
     {
-        if (!base_prev_line(&iter))
+        if (!base_prev_line(win->buffer, &iter))
         {
             break;
         }
 
-        u32 curr_line_pos = get_position(&iter);
+        u32 curr_line_pos = get_position(win->buffer, &iter);
         if (prev_line_pos == curr_line_pos + 1)
         {
             count--;
@@ -139,7 +138,7 @@ static void move_by_motion(window *win, motion_spec m_spec)
  
          case Underscore:
          {
-             win->dc.x = win->bc.x = skip_space(&win->buffer->iter, win->bc.y);
+             win->dc.x = win->bc.x = skip_space(win->buffer, &win->buffer->iter, win->bc.y);
  
          } break;
  
@@ -152,44 +151,37 @@ static void move_by_motion(window *win, motion_spec m_spec)
                 char_pair pair = open_close_pairs[m_spec.open_close_index];
 
                 iter_range range = range_search(
+                    win->buffer,
                     &win->buffer->iter,
                     win->bc, 
                     pair.open,
                     pair.close);
 
-                // u32 position = get_position(&range.start);
-
-                // win->bc =
-                // win->bc = win->dc
-
-                // if (m_spec.flags &
-                // buffer_range range = 
-                //     find_boundary(&win->buffer->iter, pair.open, pair.close, win->bc);
-                //
                 if (m_spec.flags & MotionFlags_Exclusive)
                 {
-                    base_next_cell_(&range.start);
+                    base_next_cell_(win->buffer, &range.start);
                 }
                 else
                 {     
-                    base_next_cell_(&range.end);
+                    base_next_cell_(win->buffer, &range.end);
                 }
 
                 if (m_spec.flags & MotionFlags_Visual)
                 {
-                    base_prev_cell(&range.end);
+                    base_prev_cell(win->buffer, &range.end);
                 }
-                win->bc = win->dc = get_cursor(&range.end);
-                win->vc = get_cursor(&range.start);
-                //
-                // win->bc = win->dc = range.one_past_end;
-                // win->vc = range.first;
+                win->bc = win->dc = get_cursor(win->buffer, &range.end);
+                win->vc = get_cursor(win->buffer, &range.start);
              }
              else if (m_spec.flags & MotionFlags_Backwards)
              {
                  str match_str = Str(m_spec.match_str, m_spec.match_str_len);
                  win->dc.x = win->bc.x = find_char_back(
-                        &win->buffer->iter, match_str, quantifier, win->bc);
+                     win->buffer,
+                     &win->buffer->iter,
+                     match_str,
+                     quantifier,
+                     win->bc);
                  if (m_spec.flags & MotionFlags_Exclusive)
                  {
                      win->dc.x = win->bc.x = win->bc.x + 1;
@@ -198,7 +190,12 @@ static void move_by_motion(window *win, motion_spec m_spec)
              else
              {   
                  str match_str = Str(m_spec.match_str, m_spec.match_str_len);
-                 win->dc.x = win->bc.x = find_char(&win->buffer->iter, match_str, quantifier, win->bc);
+                 win->dc.x = win->bc.x = find_char(
+                     win->buffer,
+                     &win->buffer->iter,
+                     match_str,
+                     quantifier,
+                     win->bc);
                  if (m_spec.flags & MotionFlags_Exclusive)
                  {
                      win->dc.x = win->bc.x = saturating_sub(win->bc.x, 1);
@@ -210,16 +207,16 @@ static void move_by_motion(window *win, motion_spec m_spec)
          {
              if (m_spec.flags & MotionFlags_Range)
              {
-                 win->vc = find_word_back(&win->buffer->iter, quantifier, win->bc);
-                 win->dc = win->bc = find_word(&win->buffer->iter, quantifier, win->bc);
+                 win->vc = find_word_back(win->buffer, &win->buffer->iter, quantifier, win->bc);
+                 win->dc = win->bc = find_word(win->buffer, &win->buffer->iter, quantifier, win->bc);
              }
              else if (m_spec.flags & MotionFlags_Backwards)
              {
-                 win->dc = win->bc = find_word_back(&win->buffer->iter, quantifier, win->bc);
+                 win->dc = win->bc = find_word_back(win->buffer, &win->buffer->iter, quantifier, win->bc);
              }
              else
              {
-                 win->dc = win->bc = find_word(&win->buffer->iter, quantifier, win->bc);
+                 win->dc = win->bc = find_word(win->buffer, &win->buffer->iter, quantifier, win->bc);
              }
          } break;
 
@@ -227,16 +224,16 @@ static void move_by_motion(window *win, motion_spec m_spec)
          {
              if (m_spec.flags & MotionFlags_Backwards)
              {
-                 base_iter iter = find_line(&win->buffer->iter, win->bc.y);
-                 u32 prev_line_pos = get_position(&iter);
+                 base_iter iter = find_line(win->buffer, &win->buffer->iter, win->bc.y);
+                 u32 prev_line_pos = get_position(win->buffer, &iter);
                  for (;;)
                  {
-                     if (!base_prev_line(&iter))
+                     if (!base_prev_line(win->buffer, &iter))
                      {
                          break;
                      }
 
-                     u32 curr_line_pos = get_position(&iter);
+                     u32 curr_line_pos = get_position(win->buffer, &iter);
                      if (prev_line_pos == curr_line_pos + 1)
                      {
                          quantifier--;
@@ -253,16 +250,16 @@ static void move_by_motion(window *win, motion_spec m_spec)
              else
              {
 
-                 base_iter iter = find_line(&win->buffer->iter, win->bc.y + 1);
-                 u32 prev_line_pos = get_position(&iter);
+                 base_iter iter = find_line(win->buffer, &win->buffer->iter, win->bc.y + 1);
+                 u32 prev_line_pos = get_position(win->buffer, &iter);
                  for (;;)
                  {
-                     if (!base_next_line(&iter))
+                     if (!base_next_line(win->buffer, &iter))
                      {
                          break;
                      }
 
-                     u32 curr_line_pos = get_position(&iter);
+                     u32 curr_line_pos = get_position(win->buffer, &iter);
                      if (prev_line_pos + 1 == curr_line_pos)
                      {
                          quantifier--;
@@ -294,7 +291,8 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
             if (m_spec.flags & MotionFlags_Backwards)
             {
                 result.first.y = win->bc.y;
-                result.one_past_end.y = clamped_add(win->bc.y, quantifier, win->buffer->lcnt);
+                result.one_past_end.y = clamped_add(
+                    win->bc.y, quantifier, win->buffer->lcnt + 1);
             }
             else
             {
@@ -355,7 +353,7 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
 
                 char_pair pair = open_close_pairs[m_spec.open_close_index];
 
-                result = find_boundary(&win->buffer->iter, pair.open, pair.close, win->bc);
+                result = find_boundary(win->buffer, &win->buffer->iter, pair.open, pair.close, win->bc);
 
                 if (m_spec.flags & MotionFlags_Exclusive)
                 {
@@ -372,7 +370,7 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
                 result.one_past_end.y = win->bc.y;
                 buffer_cursor bc = { .y = win->bc.y, .x = win->bc.x};
                 str s = { .buffer = m_spec.match_str, .len = m_spec.match_str_len };
-                result.one_past_end.x = find_char(&win->buffer->iter, s, quantifier, bc) + 1;
+                result.one_past_end.x = find_char(win->buffer, &win->buffer->iter, s, quantifier, bc) + 1;
                 if (m_spec.flags & MotionFlags_Exclusive)
                 {
                     result.one_past_end.x = saturating_sub(result.one_past_end.x, 1);
@@ -386,7 +384,7 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
             u32 quantifier = m_spec.motion_quantifier;
             result.one_past_end = win->bc;
             result.first.y = saturating_sub(win->bc.y, quantifier);
-            result.first.x = skip_space(&win->buffer->iter, win->bc.y);
+            result.first.x = skip_space(win->buffer, &win->buffer->iter, win->bc.y);
 
         } break;
 
@@ -395,18 +393,18 @@ static win_range get_motion_range(window *win, motion_spec m_spec)
             u32 quantifier = m_spec.motion_quantifier;
             if (m_spec.flags & MotionFlags_Range)
             {
-                result.first = find_word_back(&win->buffer->iter, quantifier, win->bc);
-                result.one_past_end = find_word(&win->buffer->iter, quantifier, win->bc);
+                result.first = find_word_back(win->buffer, &win->buffer->iter, quantifier, win->bc);
+                result.one_past_end = find_word(win->buffer, &win->buffer->iter, quantifier, win->bc);
             }
             else if (m_spec.flags & MotionFlags_Backwards)
             {
-                result.first = find_word_back(&win->buffer->iter, quantifier, win->bc);
+                result.first = find_word_back(win->buffer, &win->buffer->iter, quantifier, win->bc);
                 result.one_past_end = win->bc;
             }
             else
             {
                 result.first = win->bc;
-                result.one_past_end = find_word(&win->buffer->iter, quantifier, win->bc);
+                result.one_past_end = find_word(win->buffer, &win->buffer->iter, quantifier, win->bc);
             }
         } break;
 

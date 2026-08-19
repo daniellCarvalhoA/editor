@@ -34,27 +34,6 @@ typedef enum
     Middle,
 } state;
 
-//typedef struct
-//{
-    //action action;
-    //motion motion;
-    //motion_flags s_flags;
-    //mode_modifier m_mod;
-    //position_modifier p_mod;
-    //u32 quantifier;
-//
-    //i32 open_close_index;
-//
-    //u32 count;
-    //union
-    //{
-        //u8 char_pending[4];
-        //u8 match[4];
-    //};
-//
-    //str inserted;
-//} state_result;
-//
 typedef struct 
 {
     action action_type;

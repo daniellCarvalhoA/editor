@@ -1105,25 +1105,28 @@ static void render_command_window(screen *screen)
     }
 }
 
+#define APRIN 4
+
 static void render_window(window *win, screen *screen, mode edit_mode)
 {
     u16 w_height   = get_height(screen, win);
     u16 w_width    = get_width(screen, win);
 
-    if (((win == screen->active_window) || (win == interacting_window)) && win->layout == LeafBuffer)
+    if (((win == screen->active_window) || (win == interacting_window)) && 
+            win->layout == LeafBuffer)
     {
         u32 height = (win->flags & WinFlags_StatusLineVisible) ?
             (w_height - 1) :
             w_height;
 
-        if (win->bc.y >= win->top_line + height) 
+        if (clamped_add(win->bc.y, APRIN, win->buffer->lcnt) >= win->top_line + height) 
         {
-            win->top_line += 1 + win->bc.y - (win->top_line + height);
+            win->top_line += 1 + (clamped_add(win->bc.y, APRIN, win->buffer->lcnt)) - (win->top_line + height);
             win->change |= Render_ScrollChange;
         } 
-        else if (win->bc.y < win->top_line)
+        else if (saturating_sub(win->bc.y, APRIN) < win->top_line)
         {
-            win->top_line = win->bc.y;
+            win->top_line = saturating_sub(win->bc.y, APRIN);
             win->change |= Render_ScrollChange;
         }
 

@@ -85,7 +85,7 @@ static parse_result parse_normal(editor_state *editor, str token)
             {
                 buffer->matches_capacity = 0;
                 buffer->num_matches = 0;
-                search_str(buffer, 0, buffer->last_searched_string);
+                search_str(buffer, buffer->last_searched_string);
                 buffer->changed_since_last_search = false;
             }
 
@@ -94,6 +94,7 @@ static parse_result parse_normal(editor_state *editor, str token)
                 editor->screen.change |= Render_ShowSearchHighlight;
                 buffer->current_match = (buffer->current_match + 1) % buffer->num_matches;
                 active_window->bc = active_window->dc = cursor_from_position(
+                    buffer,
                     &buffer->iter,
                     buffer->matches[buffer->current_match]);
             }
@@ -106,7 +107,7 @@ static parse_result parse_normal(editor_state *editor, str token)
             {
                 buffer->matches_capacity = 0;
                 buffer->num_matches = 0;
-                search_str(buffer, 0, buffer->last_searched_string);
+                search_str(buffer, buffer->last_searched_string);
                 buffer->changed_since_last_search = false;
             }
 
@@ -114,7 +115,10 @@ static parse_result parse_normal(editor_state *editor, str token)
             {
                 editor->screen.change |= Render_ShowSearchHighlight;
                 buffer->current_match = (buffer->current_match + (buffer->num_matches - 1)) % buffer->num_matches;
-                active_window->bc = active_window->dc = cursor_from_position(&buffer->iter, buffer->matches[buffer->current_match]);
+                active_window->bc = active_window->dc = cursor_from_position(
+                    buffer,
+                    &buffer->iter,
+                    buffer->matches[buffer->current_match]);
             }
 
         } break;
@@ -362,6 +366,8 @@ static parse_result parse_normal(editor_state *editor, str token)
                 {
                     undo(active_window);
                 }
+                active_window->buffer->changed = true;
+                active_window->change |= Render_BufferChange;
                 result = Ok;
             }
         } break;
@@ -375,6 +381,7 @@ static parse_result parse_normal(editor_state *editor, str token)
                     redo(active_window);
                 }
                 active_window->buffer->changed = true;
+                active_window->change |= Render_BufferChange;
                 result = Ok;
             }
         } break;
@@ -524,6 +531,7 @@ static parse_result parse_normal(editor_state *editor, str token)
             else
             {
                 a_spec->action_type = Paste;
+                a_spec->p_mod = Next;
             }
             result = Ok;
 
@@ -599,45 +607,11 @@ static parse_result parse_normal(editor_state *editor, str token)
     return result;
 }
 
-static void yank(window *win, paste_buffer *p_buffer, mode edit_mode, motion_spec m_spec_)
-{
-    if (p_buffer->buffer)
-    {
-        free_paste_buffer(p_buffer);
-    }
-
-    win_range w_range = get_cursor_range(win, m_spec_, edit_mode);
-    win->dc = w_range.first;
-
-    replace_result rep = yank_(win->buffer, w_range.first, w_range.one_past_end);
-
-    p_buffer->buffer = win->buffer;
-    p_buffer->pieces = rep.pieces;
-    p_buffer->start  = rep.start;
-    p_buffer->end    = rep.end;
-    p_buffer->count  = rep.count;
-    p_buffer->type   = paste_type_from_motion(m_spec_.motion_type, edit_mode);
-}
-
-// static undo_node *change(
 static void change(window *win, win_range w_range, str inserted)
 {
-    // Assert(p_buffer);
-    // if (p_buffer && p_buffer->buffer)
-    // {
-    //     free_paste_buffer(p_buffer);
-    // }
-
-    // undo_node *node = allocate_tree_node(&win->buffer->history_arena, &win->buffer->history);
-    // node->bc = win->bc;
-
     piece piece;
-    // piece_range p_range = {};
     piece_slice p_slice = {};
     
-
-    // Assert(!s_result.inserted_count);
-
     if (inserted.len > 0 && inserted.buffer) 
     {
         // NOTE: This below is necessary because the append buffer is per piece_buffer,
@@ -664,23 +638,7 @@ static void change(window *win, win_range w_range, str inserted)
         win->bc.x = win->dc.x;
     }
 
-    range_replace_2(win->buffer, w_range.first, w_range.one_past_end, p_slice);
-    // replace_result rep = range_replace(win->buffer, w_range.first, w_range.one_past_end, p_range);
-
-    // rep.undo_header->ref_count++;
-
-    // if (p_buffer)
-    // {
-    //     p_buffer->buffer = win->buffer;
-    //     p_buffer->header = rep.undo_header;
-    //     p_buffer->start  = rep.start;
-    //     p_buffer->end    = rep.end;
-    //     p_buffer->count  = 0;
-    // }
-    //
-    // win->buffer->changed = true;
-    // node->data = rep.undo_header;
-    // return node;
+    range_replace(win->buffer, w_range.first, w_range.one_past_end, p_slice);
 }
 
 static inline u8 *get_last_append(window *win)
@@ -784,7 +742,7 @@ static void edit(editor_state *state)
     // motion_spec *c_spec = &command->c_spec_;
     window *win = state->screen.active_window;
 
-    buffer_cursor prev_cursor = win->bc;
+    // buffer_cursor prev_cursor = win->bc;
     switch (a_spec->action_type)
     {
         case NoAction:
@@ -847,6 +805,15 @@ static void edit(editor_state *state)
             begin_undo(win);
 
             win_range w_range = get_cursor_range(win, *m_spec, state->edit_mode);
+
+            if (!a_spec->inserted.len)
+            {
+                yank(win->buffer, &state->p_buffer, w_range.first, w_range.one_past_end);
+                state->p_buffer.p_type = paste_type_from_motion(
+                    m_spec->motion_type,
+                    state->edit_mode);
+            }
+
             change(win, w_range, a_spec->inserted);
 
             win->dc = win->bc = w_range.first;
@@ -864,108 +831,114 @@ static void edit(editor_state *state)
 
         case Paste:
         {
+            begin_undo(win);
+            piece_slice p_slice;
+            piece piece;
             if (!is_empty(&state->p_buffer))
             {
-                undo_node *node = allocate_tree_node(&win->buffer->history_arena, &win->buffer->history);
-                node->bc = win->bc;
-
-                piece_range p_range = {
-                    .start  = state->p_buffer.start,
-                    .end    = state->p_buffer.end,
-                    .pieces = get_pieces(&state->p_buffer),
-                    .count  = get_count(&state->p_buffer),
-                };
-
-                piece piece;
-                // Pasting text from another buffer; must serialize the pieces,
-                // and copy the text to the current buffer.
-                // NOTE: Shoule we change the paste buffer owner,
-                // specifically if this is the default paste buffer.
-                // If im pasting from another piece_buffer, isn't it likely
-                // that I will keep editing that buffer. 
-                if (state->p_buffer.buffer != win->buffer)
+                switch (state->p_buffer.type)
                 {
-                    piece = serialize_piece_range_to(state->p_buffer.buffer, win->buffer, p_range);
-
-                    p_range.pieces = &piece;
-                    p_range.count  = 1;
-                    p_range.start  = 0;
-                    p_range.end    = 0;
-                }
-
-                win_range range;
-
-                switch (state->edit_mode)
-                {
-                    case Visual:
+                    case BufferType_Pieces:
                     {
-                        range = get_visual_range(win);
+                        if (state->p_buffer.buffer == win->buffer)
+                        {
+                            p_slice.base = state->p_buffer.pieces;
+                            p_slice.count = state->p_buffer.count;
+                        }
+                        else
+                        {
+                            piece_slice p = { 
+                                .base = state->p_buffer.pieces,
+                                .count = state->p_buffer.count
+                            };
+                            piece = serialize_piece_range_to(
+                                state->p_buffer.buffer,
+                                win->buffer,
+                                p);
+                        }
                     } break;
 
-                    case LineVisual:
+                    case BufferType_AsStr:
                     {
-                        range = get_line_visual_range(win);
-                    } break;
+                        piece = make_piece( win->buffer,
+                            from_string(state->p_buffer.text));
+                        p_slice.count = 1;
+                        p_slice.base = &piece;
 
-                    default:
-                    {
-                        buffer_cursor bc = win->bc;
-
-                        if (state->p_buffer.type == Line)
-                        {
-                            bc.x = 0;
-                            win->dc.x = 0;
-                            if (a_spec->p_mod == Next)
-                            {
-                                bc.y++;
-                                win->dc.y++;
-                            }
-                        }
-                        else if (a_spec->p_mod == Next)
-                        {
-                            bc.x++;
-                        }
-
-                        range.first = range.one_past_end = bc;
                     } break;
                 }
+            }
+            win_range range;
 
-                replace_result rep = range_replace(
-                    win->buffer,
-                    range.first,
-                    range.one_past_end,
-                    p_range);
-
-                node->data = rep.undo_header;
-
-                if (a_spec->action_quantifier > 1)
+            switch (state->edit_mode)
+            {
+                case Visual:
                 {
-                    u32 num_repeat = a_spec->action_quantifier - 1;
-                    // Try to compress this if possible:
-                    // a lot of replaces into a single big replace.
-                    while (num_repeat > 0)
+                    range = get_visual_range(win);
+                } break;
+
+                case LineVisual:
+                {
+                    range = get_line_visual_range(win);
+                } break;
+
+                default:
+                {
+                    buffer_cursor bc = win->bc;
+
+                    if (state->p_buffer.p_type == Line)
                     {
-                        replace_result rep = range_replace(win->buffer, win->dc, win->dc, p_range);
-                        LIST_INSERT(node->data->next, rep.undo_header);
-                        num_repeat--;
+                        bc.x = 0;
+                        win->dc.x = 0;
+                        if (a_spec->p_mod == Next)
+                        {
+                            bc.y++;
+                            win->dc.y++;
+                        }
                     }
-                }
-                insert_node(&win->buffer->history, node);
-                state->edit_mode = Normal;
-
-                win->bc = range.first;
+                    range.first = range.one_past_end = bc;
+                } break;
             }
 
+            win->bc = range.first;
+
+            for (u32 i = 0; i < Maximum(1, a_spec->action_quantifier); ++i)
+            {
+                if (compare(range.first, range.one_past_end) != EqualTo)
+                {
+                    p_buffer p_buffer = {};
+                    yank(win->buffer, &p_buffer, range.first, range.one_past_end);
+                    range_replace(win->buffer, range.first, range.one_past_end, p_slice);
+
+                    free_paste_buffer(&state->p_buffer);
+                    state->p_buffer = p_buffer;
+                    range.one_past_end = range.first;
+                }
+                else
+                {
+                    range_replace(win->buffer, range.first, range.one_past_end, p_slice);
+                }
+            }
+
+            state->edit_mode = Normal;
+
+            end_undo(win);
         } break;
 
         case Yank:
         {
-            yank(win, &state->p_buffer, state->edit_mode, *m_spec);
+            win_range w_range = get_cursor_range(win, *m_spec, state->edit_mode);
+
+            yank(win->buffer, &state->p_buffer, w_range.first, w_range.one_past_end);
+            state->p_buffer.p_type = paste_type_from_motion(
+                m_spec->motion_type,
+                state->edit_mode);
             if (is_visual(state->edit_mode))
             {
-                state->edit_mode = Normal;
                 win->change |= Render_VisualModeCursorChange;
+                state->edit_mode = Normal;
             }
+
         } break;
 
         default:
