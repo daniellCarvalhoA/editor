@@ -1,4 +1,4 @@
-
+#include "input.h"
 typedef struct 
 {
     b32 no_errors;
@@ -9,7 +9,7 @@ typedef struct
 typedef struct 
 {
     void *handle;
-} platform_terminal_handle;
+} platform_window_handle;
 
 typedef struct 
 {
@@ -37,7 +37,6 @@ typedef struct
 } platform_window_dim;
 
 
-
 #define PLATFORM_OPEN_FILE(name) platform_file_handle name(char *filepath)
 typedef PLATFORM_OPEN_FILE(platform_open_file);
 
@@ -50,11 +49,11 @@ typedef PLATFORM_READ_DATA_FROM_FILE(platform_read_data_from_file);
 #define PLATFORM_WRITE_GATHER(name) void name(platform_file_handle *handle, platform_scatter_gather_vector *vecs, i32 count)
 typedef PLATFORM_WRITE_GATHER(platform_write_gather);
 
-#define PLATFORM_GET_TERMINAL_HANDLE(name) platform_terminal_handle name(void)
-typedef PLATFORM_GET_TERMINAL_HANDLE(platform_get_terminal_handle);
+//#define PLATFORM_GET_WINDOW_HANDLE(name) platform_window_handle name(void)
+//typedef PLATFORM_GET_WINDOW_HANDLE(platform_get_window_handle);
 
-#define PLATFORM_GET_TERMINAL_DIM(name) platform_window_dim name(platform_terminal_handle handle)
-typedef PLATFORM_GET_TERMINAL_DIM(platform_get_terminal_dim);
+#define PLATFORM_GET_WINDOW_DIM(name) platform_window_dim name(platform_window_handle handle)
+typedef PLATFORM_GET_WINDOW_DIM(platform_get_window_dim);
 
 
 #define PLATFORM_ALLOCATE_DISK_SPACE(name) void name(platform_file_handle *handle, u64 offset, u64 len) 
@@ -67,8 +66,9 @@ typedef struct platform_api
     platform_close_file            *CloseFile;
     platform_allocate_disk_space   *AllocateDiskSpace;
     platform_write_gather          *WriteGather;
-    platform_get_terminal_dim      *GetTerminalDim;
-    platform_get_terminal_handle   *GetTerminalHandle;
+    platform_get_window_dim      *GetWindowDim;
+    //platform_get_window_handle   *GetWindowHandle;
+    platform_window_handle WindowHandle;
 } platform_api;
 
 
@@ -82,10 +82,10 @@ typedef struct editor_memory
 #define PLATFORM_FILE_ERROR(name) void name(platform_file_handle *handle, char *message)
 typedef PLATFORM_FILE_ERROR(platform_file_error);
 
-#define UPDATE_AND_RENDER(name) b32 name(editor_memory *memory, str input, u32 cmdc, void **cmdl)
+#define UPDATE_AND_RENDER(name) b32 name(editor_memory *memory, keyboard_input input, memory_arena *render_arena, render_commands *r_commands, render_view view, u32 cmdc, void **cmdl)
 typedef UPDATE_AND_RENDER(UpdateAndRender);
 
-#define UPDATE_WINDOW_DIM(name) void name(editor_memory *memory)
+#define UPDATE_WINDOW_DIM(name) void name(editor_memory *memory, memory_arena *render_arena, render_commands *r_commands, render_view view)
 typedef UPDATE_WINDOW_DIM(UpdateWindowDimension);
 
 

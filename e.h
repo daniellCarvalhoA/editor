@@ -4,6 +4,7 @@
 
 typedef struct piece_list piece_list;
 typedef struct window window;
+typedef struct editor_state editor_state;
 
 typedef struct buffer_cursor
 {
@@ -44,22 +45,20 @@ static inline buffer_cursor buffer_add(buffer_cursor a, buffer_cursor_diff b)
         add.y = a.y + b.y;
         add.x = b.x;
     }
-
     return add;
 }
 
 
-#include "math.h"
 #include "command.h"
-#include "memory.h"
 #include "lists.h"
-#include "history.h"
+// #include "history.h"
 #include "buffer.h"
 #include "node.h"
 #include "undo.h"
 #include "iter.h"
-#include "piece_list.h"
 #include "paste_buffer.h"
+#include "insert_mode.h"
+#include "piece_list.h"
 #include "grid.h"
 #include "screen.h"
 #include "window.h"
@@ -158,7 +157,7 @@ typedef struct editor_state
     command prev_command;
 } editor_state;
 
-static piece_list *find_buffer(editor_state *state, str filename)
+static piece_list *find_buffer_by_name(editor_state *state, str filename)
 {
     piece_list *buffer;
     list_for_each_entry(buffer, &state->buffers, list)
@@ -173,6 +172,18 @@ static piece_list *find_buffer(editor_state *state, str filename)
     return NULL;
 }
 
-#include "insert_mode.h"
-
+#if TESTS
+static b32 is_buffer_in_buffer_list(editor_state *state, piece_list *list)
+{
+    piece_list *buffer;
+    list_for_each_entry(buffer, &state->buffers, list)
+    {
+        if (buffer == list)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+#endif
 

@@ -195,6 +195,7 @@ static inline u32 get_last_record_top(Undo_Records *records)
 }
 
 // This tests strict equality.
+#if TESTS
 static b32 are_all_records_equal(Undo_Records *a, Undo_Records *b)
 {
 
@@ -212,3 +213,4 @@ static b32 are_all_records_equal(Undo_Records *a, Undo_Records *b)
 
     return result;
 }
+#endif

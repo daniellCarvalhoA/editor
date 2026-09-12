@@ -4,6 +4,7 @@ static inline grid_view screen_view(screen *screen)
     return result;
 }
 
+#if 0
 static void flush_buffer(screen *screen)
 {
     ssize_t ret = write(1, screen->buffer, screen->cursor);
@@ -19,7 +20,6 @@ static void flush_buffer(screen *screen)
     }
     screen->cursor = 0;
 }
-
 static void write_string(screen *screen, str s) 
 {
     if (screen->cursor + s.len > ArrayCount(screen->buffer))
@@ -122,7 +122,7 @@ static void append_to_buffer(screen *screen, u8 *s, u32 len)
     screen->cursor += len;
 }
 
-#if 0
+// #if 0
 static void rotate(u32 left, u16 *mid, u32 right)
 {
     if ((left == 0) || (right == 0))
@@ -158,8 +158,8 @@ static void rotate(u32 left, u16 *mid, u32 right)
 
 static inline void update_window_size(screen *screen)
 {
-    platform_terminal_handle handle = Platform.GetTerminalHandle();
-    platform_window_dim dim = Platform.GetTerminalDim(handle);
+    platform_window_handle handle = Platform.WindowHandle;
+    platform_window_dim dim = Platform.GetWindowDim(handle);
     screen->rows = dim.height;
     screen->cols = dim.width;
 
@@ -199,8 +199,8 @@ static inline void initialize_screen(screen *screen)
     screen->rows = 40;
     screen->cols = 40;
 #else
-    platform_terminal_handle handle = Platform.GetTerminalHandle();
-    platform_window_dim dim = Platform.GetTerminalDim(handle);
+    platform_window_handle handle = Platform.WindowHandle;
+    platform_window_dim dim = Platform.GetWindowDim(handle);
     screen->rows = dim.height;
     screen->cols = dim.width;
 #endif
@@ -209,7 +209,7 @@ static inline void initialize_screen(screen *screen)
     INIT_LIST_HEAD(&screen->first_free_window);
 
     screen->root_window    = create_first_window(screen, LeafBuffer);
-    screen->active_window = screen->root_window;
+    screen->active_window  = screen->root_window;
     screen->command_window = create_window(screen, LeafCommand, WinFlags_Fixed);
 
     attach_window(screen, screen->command_window, screen->root_window, Vertical, 1);
@@ -218,6 +218,7 @@ static inline void initialize_screen(screen *screen)
 
 }
 
+#if TESTS
 static void free_screen(screen *screen)
 {
     if (screen)
@@ -227,6 +228,7 @@ static void free_screen(screen *screen)
     free_command_buffer(&screen->command_window->c_buffer);
     free_arena(&screen->render_arena);
 }
+#endif
 
 
 

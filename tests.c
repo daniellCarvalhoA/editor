@@ -75,7 +75,7 @@ static editor_state *rand_editor(prng *prng)
     editor_state *e_state = BootstrapPushStruct(editor_state, arena, 4096);
     initialize_screen(&e_state->screen);
     reset_parse_state(&e_state->p_state);
-    reset_paste_buffer(&e_state->p_buffer);
+    // reset_paste_buffer(&e_state->p_buffer);
 
     piece_list *buffer = rand_list(prng);
     map_buffer_to_window(buffer, e_state->screen.active_window);
@@ -444,9 +444,9 @@ void search_string(prng *prng)
 TEST(search_string_2)
 void search_string_2(prng *prng)
 {
-    screen screen = {};
-    initialize_screen(&screen);
-    window *win = create_window(&screen, LeafBuffer, 0);
+    screen s = {};
+    initialize_screen(&s);
+    window *win = create_window(&s, LeafBuffer, 0);
     piece_list *list = rand_list(prng);
     map_buffer_to_window(list, win);
 
@@ -460,13 +460,12 @@ void search_string_2(prng *prng)
     if (start_position == end_position)
     {
         free_piece_list(list);
-        free_screen(&screen);
+        free_screen(&s);
         search_string_2(prng);
         return;
     }
     Assert(end_position >= start_position);
      
-
     p_buffer p_buffer = {};
     yank(list, &p_buffer, br.first, br.one_past_end);
 
@@ -480,7 +479,7 @@ void search_string_2(prng *prng)
         s_string.capacity = end_position - start_position;
         s_string.buffer = (u8 *) malloc(sizeof(u8) * s_string.capacity);
         piece_slice p_slice = { .base = p_buffer.pieces, .count = p_buffer.count };
-        write_piece_text(p_buffer.buffer, p_slice, &s_string);
+        write_piece_to_text(p_buffer.buffer, p_slice, &s_string);
     }
 
     Assert(s_string.len == s_string.capacity);
@@ -497,7 +496,7 @@ void search_string_2(prng *prng)
 
     Assert(found);
     free_piece_list(list);
-    free_screen(&screen);
+    free_screen(&s);
     free_paste_buffer(&p_buffer);
 
     if (p_buffer.type != BufferType_AsStr)
@@ -519,12 +518,12 @@ void insert_mode_seq(prng *p)
 
     prng clone = clone_prng(p);
 
-    screen screen = {};
-    initialize_screen(&screen);
+    screen s = {};
+    initialize_screen(&s);
 
 
     piece_list *list_a = rand_list(p);
-    window *win_a = create_window(&screen, LeafBuffer, 0);
+    window *win_a = create_window(&s, LeafBuffer, 0);
     map_buffer_to_window(list_a, win_a);
 
     u32 cy = rand_range_u32_inclusive(p, 0, list_a->lcnt);
@@ -553,7 +552,7 @@ void insert_mode_seq(prng *p)
     }
 
     piece_list *list_b = rand_list(&clone);
-    window *win_b = create_window(&screen, LeafBuffer, 0);
+    window *win_b = create_window(&s, LeafBuffer, 0);
     map_buffer_to_window(list_b, win_b);
     {
         motion_spec m_spec = {
@@ -591,7 +590,7 @@ void insert_mode_seq(prng *p)
     b32 equal_lists = lists_are_equal(list_a, list_b);
     Assert(equal_lists);
     free_insert_seq_result(seq);
-    free_screen(&screen);
+    free_screen(&s);
     free_piece_list(list_a);
     free_piece_list(list_b);
 }

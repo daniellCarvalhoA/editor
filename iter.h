@@ -35,28 +35,57 @@ typedef struct {
 
 typedef b32 (*search_pred)(u8 *buf, u32 len, str s);
 
+/* ---------------------------- Base iter initialization ------------------------------ */
+
 static b32 base_init(piece_list *list, iter_type type, base_iter *iter);
+
+/* ----------------------------- Base iter queries/conversions ------------------------- */
+
 static inline piece *get_piece(base_iter *iter);
+
 static inline u32 get_position(piece_list *list, base_iter *iter);
 static inline u32 position(base_iter *iter);
-static inline u32 line_number(base_iter *iter);
+
 static inline u32 get_line_number(piece_list *list, base_iter *iter);
+static inline u32 line_number(base_iter *iter);
+
 static inline offset get_offset(piece_list *list, base_iter *iter);
+
+static buffer_cursor get_cursor(piece_list *list, base_iter *iter);
+static buffer_cursor cursor_from_position(piece_list *list, base_iter *last_location, u32 position);
+static u32 position_from_cursor(piece_list *list, base_iter *last_location, buffer_cursor bc);
+
+static inline str get_char_utf8(piece_list *list, base_iter *iter);
+
+/* --------------------------- Base iter traversal ---------------------------------*/
+
+static inline b32 base_next_pos(piece_list *list, base_iter *iter);
+static inline b32 base_prev_pos(base_iter *iter);
+
+static inline b32 base_prev_line(piece_list *list, base_iter *iter);
+static inline b32 base_next_line(piece_list *list, base_iter *iter);
+
+static inline b32 base_advance_by(piece_list *list, base_iter *iter, u16 count);
+static inline b32 base_reverse_by(base_iter *iter, u32 count);
+
 static cell_item base_next_cell(piece_list *list, base_iter *iter);
-static b32 base_advance_pos_by(piece_list *list, base_iter *iter, u32 count);
-static b32 base_advance_by_line(piece_list *list, base_iter *iter, u32 count);
-static b32 base_advance_rev_by_line(piece_list *list, base_iter *iter, u32 count);
-static inline void reset_cursor(piece_list *list, base_iter *iter);
-static inline void normalize(piece_list *list, base_iter *iter);
 static inline b32 base_next_cell_(piece_list *list, base_iter *iter);
 static inline b32 base_prev_cell(piece_list *list, base_iter *iter);
-static inline b32 base_advance_by_cell(piece_list *list, base_iter *iter, u32 count);
-static inline b32 base_next_pos(piece_list *list, base_iter *iter);
+
+static b32 base_advance_pos_by(piece_list *list, base_iter *iter, u32 count);
 static b32 base_advance_pos_rev_by(base_iter *iter, u32 count);
-static inline b32 base_next_line(piece_list *list, base_iter *iter);
-static inline str get_char_utf8(piece_list *list, base_iter *iter);
+
+static b32 base_advance_by_line(piece_list *list, base_iter *iter, u32 count);
+static b32 base_advance_rev_by_line(piece_list *list, base_iter *iter, u32 count);
+
+static inline b32 base_advance_by_cell(piece_list *list, base_iter *iter, u32 count);
+
 static inline b32 base_next_pred(
     piece_list *list,
     base_iter *iter,
     search_pred pred, str needle);
 
+/* --------------------------- Base iter reseting -----------------------------------*/
+
+static inline void reset_cursor(piece_list *list, base_iter *iter);
+static inline void normalize(piece_list *list, base_iter *iter);

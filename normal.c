@@ -6,8 +6,8 @@ static parse_result parse_normal(editor_state *editor, str token)
 
     normal_parse_state *p_state = &editor->p_state;
 
-    action_spec *a_spec  = &p_state->command.a_spec;
-    motion_spec *m_spec_ = &p_state->command.m_spec_;
+    action_spec *a_spec = &p_state->command.a_spec;
+    motion_spec *m_spec = &p_state->command.m_spec;
     // motion_spec *c_spec_ = &p_state->command.c_spec_;
     window *active_window = editor->screen.active_window;
 
@@ -15,15 +15,15 @@ static parse_result parse_normal(editor_state *editor, str token)
     if (token.buffer[0] >= '1' && token.buffer[0] <= '9')
     {
         a_spec->action_quantifier = a_spec->action_quantifier * 10 + (token.buffer[0] - '0');
-        m_spec_->motion_quantifier = m_spec_->motion_quantifier * 10 + (token.buffer[0] - '0');
+        m_spec->motion_quantifier = m_spec->motion_quantifier * 10 + (token.buffer[0] - '0');
         // c_spec_->motion_quantifier = c_spec_->motion_quantifier * 10 + (token.buffer[0] - '0');
         p_state->state = Middle;
         return NotDone;
     }
 
-    if (p_state->state == Middle && m_spec_->motion_type == Motion_NoMotion)
+    if (p_state->state == Middle && m_spec->motion_type == Motion_NoMotion)
     {
-        if  (m_spec_->flags & MotionFlags_Range)
+        if  (m_spec->flags & MotionFlags_Range)
         {
             i32 pair_index = get_pair(token.buffer[0]);
 
@@ -31,20 +31,20 @@ static parse_result parse_normal(editor_state *editor, str token)
             {
                 if (editor->edit_mode == Visual)
                 {
-                    m_spec_->flags |= MotionFlags_Visual;
+                    m_spec->flags |= MotionFlags_Visual;
                 }
-                m_spec_->open_close_index = pair_index;
-                m_spec_->motion_type = Motion_Search;
+                m_spec->open_close_index = pair_index;
+                m_spec->motion_type = Motion_Search;
                 return Ok;
             }
         }
     }
 
-    if (p_state->state == Middle && m_spec_->motion_type == Motion_Search)
+    if (p_state->state == Middle && m_spec->motion_type == Motion_Search)
     {
-        m_spec_->match_str_len = token.len;
-        Assert(token.len < ArrayCount(m_spec_->match_str));
-        memcpy(&m_spec_->match_str, token.buffer, token.len);
+        m_spec->match_str_len = token.len;
+        Assert(token.len < ArrayCount(m_spec->match_str));
+        memcpy(&m_spec->match_str, token.buffer, token.len);
         if (is_visual(editor->edit_mode))
         {
             active_window->change |= Render_VisualModeCursorChange;
@@ -63,17 +63,17 @@ static parse_result parse_normal(editor_state *editor, str token)
 
         case '}':
         {
-            m_spec_->motion_type = Motion_Paragraph;
-            m_spec_->motion_quantifier = Maximum(1, m_spec_->motion_quantifier);
+            m_spec->motion_type = Motion_Paragraph;
+            m_spec->motion_quantifier = Maximum(1, m_spec->motion_quantifier);
             result = Ok;
 
         } break;
 
         case '{':
         {
-            m_spec_->motion_type = Motion_Paragraph;
-            m_spec_->flags |= MotionFlags_Backwards;
-            m_spec_->motion_quantifier = Maximum(1, m_spec_->motion_quantifier);
+            m_spec->motion_type = Motion_Paragraph;
+            m_spec->flags |= MotionFlags_Backwards;
+            m_spec->motion_quantifier = Maximum(1, m_spec->motion_quantifier);
             result = Ok;
 
         } break;
@@ -125,6 +125,9 @@ static parse_result parse_normal(editor_state *editor, str token)
 
         case '/':
         {
+            command_buffer *c_buffer = &editor->screen.command_window->c_buffer;
+            clear_buffer(c_buffer);
+
             interacting_window = active_window;
             editor->screen.active_window = editor->screen.command_window;
             parse_command(editor, token);
@@ -134,6 +137,9 @@ static parse_result parse_normal(editor_state *editor, str token)
         {
             if (editor->edit_mode == Normal)
             {
+                command_buffer *c_buffer = &editor->screen.command_window->c_buffer;
+                clear_buffer(c_buffer);
+
                 interacting_window = active_window;
                 editor->screen.active_window = editor->screen.command_window;
                 parse_command(editor, token);
@@ -203,16 +209,16 @@ static parse_result parse_normal(editor_state *editor, str token)
             }
             else
             {
-                m_spec_->motion_type = Motion_Word;
-                m_spec_->motion_quantifier = Maximum(1, m_spec_->motion_quantifier);
+                m_spec->motion_type = Motion_Word;
+                m_spec->motion_quantifier = Maximum(1, m_spec->motion_quantifier);
                 result = Ok;
             }
         } break;
 
         case 'b':
         {
-            m_spec_->motion_type = Motion_Word;
-            m_spec_->flags |= MotionFlags_Backwards;
+            m_spec->motion_type = Motion_Word;
+            m_spec->flags |= MotionFlags_Backwards;
             result = Ok;
         } break;
 
@@ -222,7 +228,7 @@ static parse_result parse_normal(editor_state *editor, str token)
             {
                 case Start:
                 {
-                    m_spec_->motion_type = Zero;
+                    m_spec->motion_type = Zero;
                     result = Ok;
 
                 } break;
@@ -232,7 +238,7 @@ static parse_result parse_normal(editor_state *editor, str token)
                     if (a_spec->action_type == NoAction)
                     {
                         a_spec->action_quantifier *= 10;
-                        m_spec_->motion_quantifier *= 10;
+                        m_spec->motion_quantifier *= 10;
                         result = NotDone;
                     }
                     else
@@ -258,7 +264,7 @@ static parse_result parse_normal(editor_state *editor, str token)
             }
             else if (p_state->state == Middle && a_spec->action_type == Yank)
             {
-                m_spec_->motion_type = Motion_Vertical;
+                m_spec->motion_type = Motion_Vertical;
                 result = Ok;
             }
             else if (p_state->state == Start)
@@ -280,8 +286,8 @@ static parse_result parse_normal(editor_state *editor, str token)
             }
             else if (p_state->state == Middle && a_spec->action_type == Replace)
             {
-                m_spec_->motion_type = Motion_Vertical;
-                m_spec_->flags |= MotionFlags_Backwards;
+                m_spec->motion_type = Motion_Vertical;
+                m_spec->flags |= MotionFlags_Backwards;
                 result = Ok;
             } 
             else if (p_state->state == Start)
@@ -298,21 +304,21 @@ static parse_result parse_normal(editor_state *editor, str token)
             if (is_visual(editor->edit_mode))
             {
                 a_spec->action_type = Replace;
-                m_spec_->flags |= MotionFlags_Exclusive;
+                m_spec->flags |= MotionFlags_Exclusive;
                 result = Ok;
             }
             else if (p_state->state == Middle && a_spec->action_type == Replace)
             {
-                m_spec_->motion_type = Motion_Vertical;
-                m_spec_->flags |= MotionFlags_Backwards;
-                m_spec_->flags |= MotionFlags_Exclusive;
+                m_spec->motion_type = Motion_Vertical;
+                m_spec->flags |= MotionFlags_Backwards;
+                m_spec->flags |= MotionFlags_Exclusive;
                 result = Ok;
             } 
             else if (p_state->state == Start)
             {
                 a_spec->action_type = Replace;
                 p_state->state = Middle;
-                m_spec_->flags |= MotionFlags_Exclusive;
+                m_spec->flags |= MotionFlags_Exclusive;
                 result = NotDone;
             } 
         } break;
@@ -330,14 +336,14 @@ static parse_result parse_normal(editor_state *editor, str token)
             }
             else if (p_state->state == Middle && a_spec->action_type != NoAction)
             {
-                m_spec_->flags |= MotionFlags_Range;
-                m_spec_->flags |= MotionFlags_Exclusive;
+                m_spec->flags |= MotionFlags_Range;
+                m_spec->flags |= MotionFlags_Exclusive;
                 result = NotDone;
             }
             else if (p_state->state == Start && is_visual(editor->edit_mode))
             {
-                m_spec_->flags |= MotionFlags_Range;
-                m_spec_->flags |= MotionFlags_Exclusive;
+                m_spec->flags |= MotionFlags_Range;
+                m_spec->flags |= MotionFlags_Exclusive;
                 p_state->state = Middle;
                 result = NotDone;
             }
@@ -348,13 +354,13 @@ static parse_result parse_normal(editor_state *editor, str token)
         {
             active_window->change |= Render_ModeChange;
             a_spec->m_mod = InsertionChange;
-            m_spec_->motion_type = Underscore;
+            m_spec->motion_type = Underscore;
             result = Ok;
         } break;
 
         case '_':
         {
-            m_spec_->motion_type = Underscore;
+            m_spec->motion_type = Underscore;
             result = Ok;
         } break;
 
@@ -388,7 +394,7 @@ static parse_result parse_normal(editor_state *editor, str token)
 
         case '$':
         {
-            m_spec_->motion_type = Dollar;
+            m_spec->motion_type = Dollar;
 
             result = Ok;
         } break;
@@ -397,8 +403,8 @@ static parse_result parse_normal(editor_state *editor, str token)
         {
             active_window->change |= Render_ModeChange;
             a_spec->m_mod       = InsertionChange; 
-            m_spec_->motion_type = Dollar;
-            m_spec_->flags       = MotionFlags_Inclusive;
+            m_spec->motion_type = Dollar;
+            m_spec->flags       = MotionFlags_Inclusive;
             // s_result->quantifier = 0;
             result = Ok;
         } break;
@@ -407,14 +413,14 @@ static parse_result parse_normal(editor_state *editor, str token)
         {
             if (p_state->state == Middle && a_spec->action_type != NoAction)
             {
-                m_spec_->flags |= MotionFlags_Range;
-                m_spec_->flags &= ~MotionFlags_Exclusive;
+                m_spec->flags |= MotionFlags_Range;
+                m_spec->flags &= ~MotionFlags_Exclusive;
                 result = NotDone;
             }
             else if (p_state->state == Start && is_visual(editor->edit_mode))
             {
-                m_spec_->flags |= MotionFlags_Range;
-                m_spec_->flags &= ~MotionFlags_Exclusive;
+                m_spec->flags |= MotionFlags_Range;
+                m_spec->flags &= ~MotionFlags_Exclusive;
                 p_state->state = Middle;
                 result = NotDone;
             }
@@ -422,8 +428,8 @@ static parse_result parse_normal(editor_state *editor, str token)
             {
                 active_window->change |= Render_ModeChange;
                 a_spec->m_mod       = InsertionChange; 
-                m_spec_->motion_type = Motion_Horizontal;
-                m_spec_->flags       = MotionFlags_Inclusive;
+                m_spec->motion_type = Motion_Horizontal;
+                m_spec->flags       = MotionFlags_Inclusive;
                 result = Ok;
             }
         } break;
@@ -433,8 +439,8 @@ static parse_result parse_normal(editor_state *editor, str token)
             active_window->change |= Render_ModeChange;
             a_spec->m_mod       = InsertionChange;
 
-            m_spec_->motion_type = Dollar;
-            m_spec_->flags       = MotionFlags_Inclusive | MotionFlags_Follow;
+            m_spec->motion_type = Dollar;
+            m_spec->flags       = MotionFlags_Inclusive | MotionFlags_Follow;
 
             a_spec->count      = 1;
             a_spec->char_pending[0] = '\n';
@@ -446,7 +452,7 @@ static parse_result parse_normal(editor_state *editor, str token)
             active_window->change |= Render_ModeChange;
             // a_spec->action_type = Insertion;
 
-            m_spec_->motion_type = Zero;
+            m_spec->motion_type = Zero;
             a_spec->count      = 1;
             a_spec->char_pending[0] = '\n';
             result = Ok;
@@ -455,14 +461,14 @@ static parse_result parse_normal(editor_state *editor, str token)
 
         case 'l':
         {
-            m_spec_->motion_type = Motion_Horizontal;
+            m_spec->motion_type = Motion_Horizontal;
             result = Ok;
         } break;
 
         case 'h':
         {
-            m_spec_->motion_type = Motion_Horizontal;
-            m_spec_->flags |= MotionFlags_Backwards;
+            m_spec->motion_type = Motion_Horizontal;
+            m_spec->flags |= MotionFlags_Backwards;
             result = Ok;
         } break;
 
@@ -470,14 +476,14 @@ static parse_result parse_normal(editor_state *editor, str token)
         {
             if (p_state->state == Meta)
             {
-                m_spec_->motion_type = Motion_Vertical;
-                m_spec_->motion_quantifier = get_height(&editor->screen, active_window) / 2;
+                m_spec->motion_type = Motion_Vertical;
+                m_spec->motion_quantifier = get_height(&editor->screen, active_window) / 2;
                 result = Ok;
             }
             else
             {
-                m_spec_->motion_type = Motion_Vertical;
-                m_spec_->motion_quantifier = Maximum(1, m_spec_->motion_quantifier);
+                m_spec->motion_type = Motion_Vertical;
+                m_spec->motion_quantifier = Maximum(1, m_spec->motion_quantifier);
                 result = Ok;
             }
         } break;
@@ -486,30 +492,30 @@ static parse_result parse_normal(editor_state *editor, str token)
         {
             if (p_state->state == Meta)
             {
-                m_spec_->motion_type = Motion_Vertical;
-                m_spec_->flags |= MotionFlags_Backwards;
-                m_spec_->motion_quantifier = get_height(&editor->screen, active_window) / 2;
+                m_spec->motion_type = Motion_Vertical;
+                m_spec->flags |= MotionFlags_Backwards;
+                m_spec->motion_quantifier = get_height(&editor->screen, active_window) / 2;
                 result = Ok;
             }
             else
             {
-                m_spec_->motion_type = Motion_Vertical;
-                m_spec_->flags |= MotionFlags_Backwards;
-                m_spec_->motion_quantifier = Maximum(1, m_spec_->motion_quantifier);
+                m_spec->motion_type = Motion_Vertical;
+                m_spec->flags |= MotionFlags_Backwards;
+                m_spec->motion_quantifier = Maximum(1, m_spec->motion_quantifier);
                 result = Ok;
             }
         } break;
 
         case 'G':
         {
-            m_spec_->motion_type = Absolute;
-            if (!m_spec_->motion_quantifier)
+            m_spec->motion_type = Absolute;
+            if (!m_spec->motion_quantifier)
             {
-                m_spec_->motion_quantifier = UINT32_MAX;
+                m_spec->motion_quantifier = UINT32_MAX;
             }
             else
             {
-                m_spec_->motion_quantifier--;
+                m_spec->motion_quantifier--;
             }
             result = Ok;
         } break;
@@ -525,8 +531,8 @@ static parse_result parse_normal(editor_state *editor, str token)
         {
             if (p_state->state == Middle && a_spec->action_type != NoAction)
             {
-                m_spec_->motion_quantifier = Maximum(1, m_spec_->motion_quantifier);
-                m_spec_->motion_type = Motion_Paragraph;
+                m_spec->motion_quantifier = Maximum(1, m_spec->motion_quantifier);
+                m_spec->motion_type = Motion_Paragraph;
             }
             else
             {
@@ -539,7 +545,7 @@ static parse_result parse_normal(editor_state *editor, str token)
 
         case 'f':
         {
-            m_spec_->motion_type = Motion_Search; 
+            m_spec->motion_type = Motion_Search; 
             if (p_state->state == Start)
             {
                 p_state->state = Middle;
@@ -553,8 +559,8 @@ static parse_result parse_normal(editor_state *editor, str token)
 
         case 'F':
         {
-            m_spec_->motion_type = Motion_Search; 
-            m_spec_->flags = MotionFlags_Backwards;
+            m_spec->motion_type = Motion_Search; 
+            m_spec->flags = MotionFlags_Backwards;
             if (p_state->state == Start)
             {
                 p_state->state = Middle;
@@ -570,8 +576,8 @@ static parse_result parse_normal(editor_state *editor, str token)
 
         case 't':
         {
-            m_spec_->motion_type = Motion_Search;
-            m_spec_->flags |= MotionFlags_Exclusive;
+            m_spec->motion_type = Motion_Search;
+            m_spec->flags |= MotionFlags_Exclusive;
             if (p_state->state == Start)
             {
                 p_state->state = Middle;
@@ -585,9 +591,9 @@ static parse_result parse_normal(editor_state *editor, str token)
 
         case 'T':
         {
-            m_spec_->motion_type = Motion_Search;
-            m_spec_->flags |= MotionFlags_Exclusive;
-            m_spec_->flags |= MotionFlags_Backwards;
+            m_spec->motion_type = Motion_Search;
+            m_spec->flags |= MotionFlags_Exclusive;
+            m_spec->flags |= MotionFlags_Backwards;
             if (p_state->state == Start)
             {
                 p_state->state = Middle;
@@ -731,7 +737,7 @@ static void edit(editor_state *state)
 {
     command *command = &state->p_state.command;
     action_spec *a_spec = &command->a_spec;
-    motion_spec *m_spec = &command->m_spec_;
+    motion_spec *m_spec = &command->m_spec;
 
     if ((a_spec->m_mod == NoChange) &&
         (a_spec->action_type == NoAction) && 
@@ -947,9 +953,13 @@ static void edit(editor_state *state)
     }
 }
 
-static void process_normal(editor_state *state, str s)
+static void process_normal(editor_state *state, keyboard_input input)
 {
-    switch (parse_normal(state, s))
+    if (input.utf8_str.len == 0)
+    {
+        return;
+    }
+    switch (parse_normal(state, input.utf8_str))
     {
         case Ok:
         {

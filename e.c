@@ -18,7 +18,11 @@
 #include "insert_mode.c"
 
 
-static void render(editor_state *state)
+static void render(
+    editor_state *state,
+    memory_arena *render_arena,
+    render_commands *r_commands,
+    render_view view)
 {
     piece_list *buffer;
     list_for_each_entry(buffer, &state->buffers, list)
@@ -26,34 +30,44 @@ static void render(editor_state *state)
         window *win;
         list_for_each_entry(win, &buffer->window_sentinel, next_in_buffer)
         {
-            render_window(win, &state->screen, state->edit_mode);
+            render_window(win, render_arena, r_commands, view, &state->screen, state->edit_mode);
         }
 
-        buffer->changed        = false;
+        buffer->changed = false;
     }
 
     if (state->screen.change & Render_RedrawBorders)
     {
-        draw_borders(&state->screen, state->screen.root_window);
+        draw_borders(render_arena, r_commands, &state->screen, state->screen.root_window);
     }
 
     state->screen.change = Render_NoChange;
 
-    render_command_window(&state->screen);
+    render_command_window(&state->screen, render_arena, r_commands);
 
     reset_window_cursor(&state->screen, state->edit_mode);
     window *active_window = state->screen.active_window;
 
-    place_cursor(&state->screen, active_window->cy, active_window->cx);
+    render_command command = 
+    {
+        .type = RenderCommand_Rect,
+        .color = Default,
+        .cursor = {
+            .row = active_window->cy,
+            .col = active_window->cx
+        }
+    };
+    push_render_command(render_arena, r_commands, command);
+    // place_cursor(&state->screen, active_window->cy, active_window->cx);
 
-    flush_buffer(&state->screen);
+    // flush_buffer(&state->screen);
 }
 
 static void initialize_editor(editor_state *state, char *filepath)
 {
     initialize_screen(&state->screen);
     reset_parse_state(&state->p_state);
-    reset_paste_buffer(&state->p_buffer);
+    // reset_paste_buffer(&state->p_buffer);
 
     piece_list *buffer = create_buffer(&state->arena, filepath);
     map_buffer_to_window(buffer, state->screen.active_window);
@@ -71,7 +85,7 @@ extern UPDATE_WINDOW_DIM(update_window_dim)
     {
         update_window_size(&editor->screen);
         editor->screen.change |= Render_LayoutChange;
-        render(editor);
+        render(editor, render_arena, r_commands, view);
         editor->screen.change = Render_NoChange;
     }
 }
@@ -96,7 +110,7 @@ extern UPDATE_AND_RENDER(update_and_render)
         {
             case Insert:
             {
-                if (process_insert(editor, input))
+                if (process_insert(editor, input.utf8_str))
                 {
                     return true;
                 }
@@ -106,7 +120,7 @@ extern UPDATE_AND_RENDER(update_and_render)
             {
                 if (editor->screen.active_window == editor->screen.command_window)
                 {
-                    if (parse_command(editor, input))
+                    if (parse_command(editor, input.utf8_str))
                     {
                         return true;
                     }
@@ -119,7 +133,7 @@ extern UPDATE_AND_RENDER(update_and_render)
 
             case Layout:
             {
-                process_layout(editor, input);
+                process_layout(editor, input.utf8_str);
             } break;
 
             case LineVisual:
@@ -132,7 +146,7 @@ extern UPDATE_AND_RENDER(update_and_render)
         }
     }
 
-    render(editor);
+    render(editor, render_arena, r_commands, view);
     return false;
 }
 

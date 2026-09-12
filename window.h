@@ -15,7 +15,6 @@ static inline b32 is_visual(mode mode)
     return result;
 }
 
-
 typedef buffer_cursor win_cursor;
 
 typedef struct
@@ -25,7 +24,6 @@ typedef struct
 } win_range;
 
 typedef win_range buffer_range;
-
 typedef win_cursor screen_cursor;
 
 typedef enum  
@@ -115,12 +113,8 @@ typedef struct window
     buffer_cursor bc;
     // Desired cursor position.
     buffer_cursor dc;
-    // u32 dcx;
-    // u32 dcy;
     // Visual mode data
     buffer_cursor vc;
-    // u32 vcx;
-    // u32 vcy;
     // The buffer line range this window spans
     u32 top_line;
     u32 cx_offset;

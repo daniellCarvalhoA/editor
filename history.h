@@ -42,7 +42,7 @@ typedef struct history
     undo_memory_block *first_block;
 } history;
 
-static inline void free_memory_block(memory_arena *history_arena, history *history, void *ptr, memory_index block_size);
+// static inline void free_memory_block(memory_arena *history_arena, history *history, void *ptr, memory_index block_size);
 static void free_undo_memory_block(memory_arena *history_arena, history *history, undo_memory_header *header);
 
 static b32 headers_are_equal(undo_memory_header *a, undo_memory_header *b)

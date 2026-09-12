@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/uio.h>
+#include <sys/ioctl.h>
 
 #include <signal.h>
 #include <errno.h>
@@ -12,21 +13,23 @@
 #include <poll.h>
 #include <termios.h>
 
-#include "e.h"
+#include "e_share.h" 
+#include "e_platform.h"
 #include "linux_e.h"
+#include "terminal_renderer.h"
 
 static platform_api Platform;
 
 static struct termios term;
 static struct termios old_term;
 
-PLATFORM_GET_TERMINAL_HANDLE(LinuxGetTerminalHandle)
-{
-    platform_terminal_handle handle = { (void *) 1 };
-    return handle;
-}
-
-PLATFORM_GET_TERMINAL_DIM(LinuxGetTerminalDim)
+// PLATFORM_GET_WINDOW_HANDLE(LinuxGetTerminalHandle)
+// {
+//     platform_window_handle handle = { (void *) 1 };
+//     return handle;
+// }
+//
+PLATFORM_GET_WINDOW_DIM(LinuxGetTerminalDim)
 {
     struct window_size {
         u16 ws_row;
@@ -47,77 +50,6 @@ PLATFORM_GET_TERMINAL_DIM(LinuxGetTerminalDim)
     return dim;
 }
 
-PLATFORM_OPEN_FILE(LinuxOpenFile)
-{
-    platform_file_handle result = { .no_errors = true};
-
-    i32 fd = open(filepath, O_RDWR| O_CREAT, S_IWUSR|S_IRUSR|S_IRGRP|S_IWGRP|S_IROTH);
-    if (fd == -1)
-    {
-        result.no_errors = false;
-    }
-    else
-    {
-        struct stat file_status;
-        fstat(fd, &file_status);
-        result.Platform = (void *) (u64) fd;
-        result.size = file_status.st_size;
-    }
-
-    return result;
-}
-
-PLATFORM_CLOSE_FILE(LinuxCloseFile)
-{
-    i32 fd = (i32) (u64) (handle.Platform);
-    close(fd);
-}
-
-PLATFORM_READ_DATA_FROM_FILE(LinuxReadFromFile)
-{
-    u32 bytes_to_read = size;
-    u8 *next_byte_location = (u8 *) dst;
-
-    i32 fd = (i32) (u64) handle->Platform;
-    lseek(fd, (off_t) offset, SEEK_SET);
-    while (bytes_to_read)
-    {
-        ssize_t bytes_read = read(fd, next_byte_location, bytes_to_read);
-        if (bytes_read == -1)
-        {
-            handle->no_errors = false;
-            break;
-        }
-        bytes_to_read -= bytes_read;
-        next_byte_location += bytes_read;
-    }
-}
-
-PLATFORM_ALLOCATE_DISK_SPACE(LinuxAllocateDiskSpace)
-{
-    i32 fd = (i32) (u64) handle->Platform;
-    i32 ret = posix_fallocate(fd, offset, len);
-
-    if (ret != 0)
-    {
-        perror("posix_fallocate");
-        handle->no_errors = false;
-    }
-}
-
-PLATFORM_WRITE_GATHER(LinuxWriteGather)
-{
-    i32 fd = (i32) (u64) handle->Platform;
-    const struct iovec *iov = (const struct iovec *) vecs;
-    // i32 iov_flags = (i32) flags.flags;
-    i32 ret = writev(fd, iov, count);
-
-    if (ret == -1)
-    {
-        handle->no_errors = false;
-    }
-    // writev(
-}
 
 static void reset_mode()
 {
@@ -154,10 +86,7 @@ static void set_raw_mode()
     atexit(reset_mode);
 }
 
-static b32 handle_events(
-    int fd,
-    // int *wd,
-    char *arg)
+static b32 handle_events(int fd, char *arg)
 {
     b32 result = false;
     char buf[4096] __attribute__ ((aligned(__alignof__(struct inotify_event))));
@@ -205,8 +134,7 @@ typedef struct mapped_file
 } mapped_file;
 
 
-static mapped_file map_file(
-    char *pathname)
+static mapped_file map_file(char *pathname)
 {
     mapped_file map = {};
     map.filepath = pathname;
@@ -235,8 +163,7 @@ static mapped_file map_file(
     return map;
 }
 
-static b32 remap_file(
-    mapped_file *map)
+static b32 remap_file(mapped_file *map)
 {
     int fd = open(map->filepath, O_RDONLY);
 
@@ -270,27 +197,8 @@ static b32 remap_file(
 static editor_memory allocate_editor_memory()
 {
     editor_memory memory = {};
-    // memory.permanent_storage_size = Megabytes(256);
-//     memory.transient_storage_size = Gigabytes(1);
-// // #if DEBUG
-//     void *base_address = (void *) Terabytes(2);
-// // #else
-// //     void *base_address = 0;
-// // #endif
-//
-//     u64 total_storage_size = /* memory.permanent_storage_size + */ memory.transient_storage_size;
-//     void *storage = mmap(
-//         base_address,
-//         total_storage_size,
-//         PROT_READ | PROT_WRITE,
-//         MAP_PRIVATE | MAP_ANONYMOUS,
-//         -1, 0);
-//     // memory.permanent_storage = storage;
-//     memory.transient_storage = (u8 *) storage /* + memory.permanent_storage_size */;
-
     return memory;
 }
-
 
 int main(int argc, char **argv)
 {
@@ -333,7 +241,11 @@ int main(int argc, char **argv)
 
     for (i = 0; i < 1; i++)
     {
-        wd[i] = inotify_add_watch(ifd, ".", IN_CREATE | IN_MOVED_TO | IN_CLOSE_WRITE | IN_DELETE);
+        wd[i] = inotify_add_watch(
+            ifd,
+            ".",
+            IN_CREATE | IN_MOVED_TO | IN_CLOSE_WRITE | IN_DELETE);
+
         if (wd[i] == -1)
         {
             fprintf(stderr, "Cannot watch 'e_copy': %s\n", strerror(errno));
@@ -371,24 +283,39 @@ int main(int argc, char **argv)
     editor_memory memory = allocate_editor_memory();
     linux_e_code code    = load_code(src_code_dll_fullpath);
 
+    // TODO: Make this stdout;
+    u64 out = 1;
+
     memory.Platform.OpenFile          = LinuxOpenFile;
     memory.Platform.ReadDataFromFile  = LinuxReadFromFile;
     memory.Platform.CloseFile         = LinuxCloseFile;
     memory.Platform.AllocateDiskSpace = LinuxAllocateDiskSpace;
     memory.Platform.WriteGather       = LinuxWriteGather;
-    memory.Platform.GetTerminalDim    = LinuxGetTerminalDim;
-    memory.Platform.GetTerminalHandle = LinuxGetTerminalHandle;
+    memory.Platform.GetWindowDim    = LinuxGetTerminalDim;
+    memory.Platform.WindowHandle.handle = (void *) out ;
 
     Platform = memory.Platform;
 
-    str s = {};
-    if (code.update_and_render(&memory, s, argc, (void **) argv))
+    memory_arena render_arena;
+    initialize_arena_with_size(&render_arena, Megabytes(1));
+
+    render_commands r_commands = allocate_render_commands(&render_arena);
+
+    keyboard_input initial_input = {};
+
+    terminal_renderer t_renderer = {};
+
+    if (code.update_and_render(&memory, initial_input, &render_arena, &r_commands, terminal_view, argc, (void **) argv))
     {
         return 1;
     }
 
+    render_terminal(&t_renderer, &r_commands);
+    clear_arena(&render_arena);
+
     while (true)
     {
+        r_commands = allocate_render_commands(&render_arena);
         poll_num = poll(fds, nfds, -1);
         if (poll_num == -1)
         {
@@ -411,12 +338,19 @@ int main(int argc, char **argv)
                 i32 num_read = read(STDIN_FILENO, buffer, 4);
                 str s = { .buffer = buffer, .len = num_read };
 
+                keyboard_input input =
+                {
+                    .supports_physical_layout = false,
+                    .utf8_str = s
+                };
+
                 if (num_read > 0)
                 {
-                    if (code.update_and_render(&memory, s, argc, (void **) argv))
+                    if (code.update_and_render(&memory, input, &render_arena, &r_commands, terminal_view, argc, (void **) argv))
                     {
                         break;
                     }
+                    render_terminal(&t_renderer, &r_commands);
                 }
             }
 
@@ -453,11 +387,16 @@ int main(int argc, char **argv)
 
                 if (si.ssi_signo == SIGWINCH)
                 {
-                    code.update_window_dim(&memory);
+                    code.update_window_dim(&memory, &render_arena, &r_commands, terminal_view);
                 }
 
             }
         }
+
+        clear_arena(&render_arena);
+        Assert(render_arena.used == 0);
+
+
     }
     reset_mode();
 

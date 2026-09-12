@@ -4,7 +4,7 @@ typedef enum
     Line,
 } paste_type;
 
-
+#if 0
 typedef struct
 {
     piece_list *buffer;         // 8 bytes;
@@ -18,6 +18,8 @@ typedef struct
     };
     paste_type type;
 } paste_buffer;
+
+#endif
 
 typedef enum
 {
@@ -44,7 +46,7 @@ typedef struct
 
 } p_buffer;
 
-static inline void reset_paste_buffer(p_buffer *buffer);
+// static inline void reset_paste_buffer(p_buffer *buffer);
 static inline b32 is_empty(p_buffer *buffer);
 static void free_paste_buffer(p_buffer *buffer);
 

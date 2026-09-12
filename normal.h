@@ -58,9 +58,7 @@ typedef struct
 {
     action_spec a_spec;
     // Describes the range within the buffer a change will be made;
-    motion_spec c_spec_;
-    // Describes the motion after a change;
-    motion_spec m_spec_;
+    motion_spec m_spec;
 } command;
 
 typedef struct 
@@ -75,9 +73,7 @@ static inline void reset_parse_state(normal_parse_state *p_state)
 {
     p_state->state  = Start;
     reset_action_spec(&p_state->command.a_spec);
-    reset_motion_spec(&p_state->command.m_spec_);
-    reset_motion_spec(&p_state->command.c_spec_);
-
+    reset_motion_spec(&p_state->command.m_spec);
 }
 
 typedef enum 

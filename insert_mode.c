@@ -1,3 +1,19 @@
+static void clear_insert_state(insert_mode *mode)
+{
+    mode->position = 0;
+    mode->ins_count = 0;
+    mode->del_count = 0;
+    mode->abs_idx = 0;
+    mode->state = Init;
+    mode->deleted = false;
+    INIT_LIST_HEAD(&mode->piece_head);
+}
+
+static inline void initialize_insert_state(insert_mode *mode)
+{
+    clear_insert_state(mode);
+}
+
 static void into_insert_mode(editor_state *state) 
 {
     state->p_state.command.a_spec.inserted = (struct str) {
@@ -32,7 +48,7 @@ static void commit_insert_mode_undo(piece_list *list)
         }
     }
     clear_insert_state(&list->i_state);
-    clear(&state->insert_mode_arena);
+    clear_arena(&state->insert_mode_arena);
 }
 
 static void into_normal_mode(editor_state *state)
@@ -449,6 +465,10 @@ static void insert_mode_delete(window *win)
 
 static b32 process_insert(editor_state *state, str s)
 {
+    if (s.len == 0)
+    {
+        return false;
+    }
     b32 result = false;
     window *win = state->screen.active_window;
     switch (s.buffer[0])

@@ -4,6 +4,7 @@ static inline command_buffer allocate_command_buffer(u32 size)
     return result;
 }
 
+#if TESTS
 static void free_command_buffer(command_buffer *buffer)
 {
     if (buffer && buffer->buffer)
@@ -11,8 +12,7 @@ static void free_command_buffer(command_buffer *buffer)
         free(buffer->buffer);
     }
 }
-
-
+#endif
 
 typedef enum
 {
@@ -23,6 +23,7 @@ typedef enum
     ParseFlags_Search            = 0x8,
     ParseFlags_Replace           = 0x10,
     ParseFlags_NoSearchHighlight = 0x20,
+    ParseFlags_Force             = 0x40,
 } parse_flags;
 
 typedef struct
@@ -135,6 +136,7 @@ static token get_token(tokenizer *tokenizer, b32 skip_space)
                    ((is_alpha_numeric(tokenizer->at[0]) || 
                     (tokenizer->at[0] == '_') ||
                     (tokenizer->at[0] == '.') ||
+                    (tokenizer->at[0] == '!') || 
                     (!skip_space && tokenizer->at[0] == ' '))))
             {
                 ++tokenizer->at;
@@ -206,6 +208,11 @@ static b32 parse_comm(parse_tree *tree, tokenizer *tokenizer)
         {
             tree->flags |= ParseFlags_Save;
         } 
+        else if (token_equals(c_token, (u8 *) "q!", 2))
+        {
+            tree->flags |= ParseFlags_Quit;
+            tree->flags |= ParseFlags_Force;
+        }
         else if (token_equals(c_token, (u8 *) "q", 1))
         {
             tree->flags |= ParseFlags_Quit;
@@ -265,11 +272,13 @@ static b32 process_command(editor_state *state)
 {
     b32 result = false;
     parse_tree p_tree = parse_command_tree(&state->screen.command_window->c_buffer);
+    command_buffer *c_buffer = &state->screen.command_window->c_buffer;
 
     if (p_tree.flags & ParseFlags_Save)
     {
         Assert(!(p_tree.flags & ParseFlags_Open));
         write_buffer_to_file(state->screen.active_window->buffer);
+        state->screen.active_window->buffer->up_to_date = true;
     }
 
     if (p_tree.flags & ParseFlags_Open)
@@ -277,7 +286,7 @@ static b32 process_command(editor_state *state)
         Assert(!(p_tree.flags & ParseFlags_Quit));
         Assert(!(p_tree.flags & ParseFlags_Save));
 
-        piece_list *buffer = find_buffer(state, p_tree.filename); 
+        piece_list *buffer = find_buffer_by_name(state, p_tree.filename); 
         if (!buffer)
         {
             char *filename = (char *) malloc(p_tree.filename.len + 1);
@@ -288,8 +297,6 @@ static b32 process_command(editor_state *state)
             list_add_tail(&buffer->list, &state->buffers);
         }
 
-
-
         list_del(&state->screen.active_window->next_in_buffer);
 
         map_buffer_to_window(buffer, state->screen.active_window);
@@ -297,16 +304,24 @@ static b32 process_command(editor_state *state)
         clear_window(state->screen.active_window);
 
         state->screen.active_window->change |= Render_BufferExchange;
+        clear_buffer(c_buffer);
     }
 
     if (p_tree.flags & ParseFlags_Quit)
     {
+        clear_buffer(c_buffer);
         Assert(!(p_tree.flags & ParseFlags_Open));
-        close_active_window(&state->screen);
+        piece_list *buffer = state->screen.active_window->buffer;
 
-        // NOTE. This is a hack. 
-        result = (state->screen.active_window == state->screen.command_window);
-
+        if (buffer->up_to_date || (p_tree.flags & ParseFlags_Force))
+        {
+            close_active_window(&state->screen);
+            result = (!state->screen.num_leaf_windows);
+        }
+        else
+        {
+            append_char(c_buffer, STR_LIT("Changes not yet committed!"));
+        }
     }
 
     if (p_tree.flags & ParseFlags_Search)
@@ -320,7 +335,6 @@ static b32 process_command(editor_state *state)
             buffer->match_len = 0;
             buffer->changed = true;
             buffer->replace_len = 0;
-            buffer->replaced = false;
         }
         else
         {
@@ -333,6 +347,7 @@ static b32 process_command(editor_state *state)
                     buffer->matches[buffer->current_match]);
             }
         }
+        clear_buffer(c_buffer);
     }
 
     if (p_tree.flags & ParseFlags_NoSearchHighlight)
@@ -340,6 +355,7 @@ static b32 process_command(editor_state *state)
         state->screen.change &= ~Render_ShowSearchHighlight;
         piece_list *buffer = interacting_window->buffer;
         buffer->changed = true;
+        clear_buffer(c_buffer);
 
     }
 
@@ -375,6 +391,7 @@ static void backtrack(window *win)
     buffer_cursor new_cursor = cursor_from_position(
         buffer, &buffer->iter, new_position);
     interacting_window->bc = new_cursor;
+    buffer->replace_len = 0;
 }
 
 
@@ -418,7 +435,7 @@ static b32 parse_command(editor_state *state, str input)
         {
             screen->active_window = interacting_window;
             result = process_command(state);
-            clear_buffer(c_buffer);
+            // clear_buffer(c_buffer);
         } break;
 
         case 127:
@@ -578,7 +595,7 @@ static b32 parse_command(editor_state *state, str input)
                 piece_list *buffer = interacting_window->buffer;
                 if ((tree.flags & ParseFlags_Replace) && (tree.replace_string.len > 0))
                 {
-                    buffer->replaced = true;
+                    buffer->replace_len = tree.replace_string.len;
                     if (!is_in_middle_of_undo(&buffer->undo_records))
                     {
                         begin_undo(interacting_window);
@@ -598,7 +615,6 @@ static b32 parse_command(editor_state *state, str input)
                     }
                     else
                     {
-                        buffer->replace_len = tree.replace_string.len;
                         Assert(tree.replace_string.len >= prev_replace_string.len);
 
                         utf8proc_int32_t cp;

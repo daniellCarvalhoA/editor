@@ -1,4 +1,5 @@
 
+#if TESTS
 static b32 buffers_are_equal(const buffer *a, const buffer *b)
 {
     // TODO: See disaseembly to see if this gets vecotrized.
@@ -36,6 +37,7 @@ static b32 strictly_increasing(const u32 *buffer, const u32 count)
     }
     return result;
 }
+#endif
 
 // static buffer *get_buffer(buffer_type type, const segment
 

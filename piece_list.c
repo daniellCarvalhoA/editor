@@ -1,4 +1,3 @@
-
 // NOTE: This is very imcomplete and unoptimized
 static buffer original_from_text(memory_arena *arena, u8 *text, u32 text_len)
 {
@@ -90,7 +89,11 @@ static inline piece make_piece(piece_list *list, str s)//  u8 *text, u32 text_le
     return new_piece;
 }
 
-static inline base_iter find_abs_idx(
+
+/* ----------------------------------- Search -------------------------------------- */
+
+
+static base_iter find_abs_idx(
     piece_list *list,
     base_iter *last_location,
     u32 abs_idx)
@@ -138,44 +141,7 @@ static base_iter find_position(piece_list *list, base_iter *last_location, u32 p
     return iter;
 }
 
-static u32 position_from_cursor(
-    piece_list *list,
-    base_iter *last_location,
-    buffer_cursor bc) 
-{
-    base_iter iter = find_cursor(list, last_location, bc);
-    u32 result = get_position(list, &iter);
-    return result;
-}
-
-static buffer_cursor get_cursor(piece_list *list, base_iter *iter)
-{
-    buffer_cursor result = { .y = line_number(iter) };
-    while (base_prev_cell(list, iter) && result.y == line_number(iter))
-    {
-        result.x++;
-    }
-    return result;
-}
-
-static buffer_cursor cursor_from_position(
-    piece_list *list, 
-    base_iter *last_location,
-    u32 position)
-{
-    buffer_cursor result = {};
-    base_iter iter = find_position(list, last_location, position);
-    result.y = line_number(&iter);
-
-    while (base_prev_cell(list, &iter) && result.y == line_number(&iter))
-    {
-        result.x++;
-    }
-    return result;
-}
-
-static inline base_iter find_line(
-    piece_list *list, base_iter *last_location, u32 line)
+static base_iter find_line(piece_list *list, base_iter *last_location, u32 line)
 {
     base_iter iter = *last_location;
     u32 last_line = get_line_number(list, &iter);
@@ -196,8 +162,7 @@ static inline base_iter find_line(
     return iter;
 }
 
-static inline base_iter find_cursor(
-    piece_list *list, base_iter *last_location, buffer_cursor cursor)
+static base_iter find_cursor(piece_list *list, base_iter *last_location, buffer_cursor cursor)
 {
     base_iter iter;
     if (cursor.y > list->lcnt)
@@ -218,29 +183,35 @@ static inline base_iter find_cursor(
     return iter;
 }
 
-static u32 skip_space(piece_list *list, base_iter *last_location, u32 cy)
+static u32 find_char(piece_list *list, base_iter *last_location, str match, u32 count, buffer_cursor cursor)
 {
     u32 result = 0;
-    base_iter iter = find_line(list, last_location, cy);
-    str s = {};
-    while (base_next_pred(list, &iter, is_white_space, s)) 
+    base_iter iter = find_cursor(list, last_location, cursor);
+
+    for (; count > 0;)
     {
+        if (!base_next_cell_(list, &iter))
+        {
+            result = 0;
+            break;
+        }
+
+        str s = get_char_utf8(list, &iter);
+
+        if ((s.len == 1) && (memcmp(s.buffer, "\n", 1) == 0))
+        {
+            result = 0;
+            break;
+        }
+
         result++;
+        if ((match.len == s.len) && 
+            (memcmp(match.buffer, s.buffer, match.len) == 0))
+        {
+            count--;
+        }
     }
-    return result;
-}
-
-static u32 get_line_len(piece_list *list, base_iter *last_location, u32 line)
-{
-    base_iter iter = find_line(list, last_location, line);
-    u32 len = 0;
-
-    while (base_next_cell_(list, &iter) && line_number(&iter) == line)
-    {
-        len++;
-    }
-
-    return len;
+    return result + cursor.x;
 }
 
 static u32 find_char_back(
@@ -275,6 +246,128 @@ static u32 find_char_back(
     }
 
     return cursor.x - result;
+}
+
+static buffer_cursor find_word(piece_list *list, base_iter *last_location, u32 count, buffer_cursor cursor)
+{
+    buffer_cursor result = cursor;
+    base_iter iter = find_cursor(list, last_location, cursor);
+
+    for(; count > 0;)
+    {
+        // skip non_space
+        do 
+        {
+            str s = get_char_utf8(list, &iter);
+            Assert(s.len);
+            result.x++;
+            // NOTE: IMCOMPLETE/WRONG
+            if (s.buffer[0] == ' ' || s.buffer[0] == '\t' || s.buffer[0] == '\n')
+            {
+                if (s.buffer[0] == '\n')
+                {
+                    result.x = 0;
+                    result.y++;
+                }
+                break;
+            }
+        } while (base_next_cell_(list, &iter));
+        // skip space;
+        while (base_next_cell_(list, &iter))
+        {
+            str s = get_char_utf8(list, &iter);
+            Assert(s.len);
+            // NOTE: IMCOMPLETE/WRONG
+            if (!(s.buffer[0] == ' ' || s.buffer[0] == '\t' || s.buffer[0] == '\n'))
+            {
+                break;
+            }
+            if (s.buffer[0] == '\n')
+            {
+                result.x = 0;
+                result.y++;
+            }
+            else
+            {
+                result.x++;
+            }
+        }
+        count--;
+    }
+    return result;
+}
+
+static buffer_cursor find_word_back(
+    piece_list *list,
+    base_iter *last_location,
+    u32 count,
+    buffer_cursor cursor)
+{
+    buffer_cursor result = cursor;
+    base_iter iter = find_cursor(list, last_location, cursor);
+
+    b32 normal_exit = false;
+    for (; count > 0; )
+    {
+        // skip non_space;
+        while (base_prev_cell(list, &iter))
+        {
+            str s = get_char_utf8(list, &iter);
+            Assert(s.len);
+            // NOTE: IMCOMPLETE/WRONG
+            if (!(s.buffer[0] == ' ' || s.buffer[0] == '\t' || s.buffer[0] == '\n'))
+            {
+                normal_exit |= true;
+                break;
+            }
+        }
+        // skip space
+        while (base_prev_cell(list, &iter))
+        {
+            normal_exit = false;
+            str s = get_char_utf8(list, &iter);
+            Assert(s.len);
+            if (s.buffer[0] == ' ' || s.buffer[0] == '\t' || s.buffer[0] == '\n')
+            {
+                normal_exit |= true;
+                break;
+            }
+        }
+        count--;
+    }
+
+    if (normal_exit)
+    {
+        b32 valid = base_next_cell_(list, &iter);
+        Assert(valid);
+    }
+    result = get_cursor(list, &iter);
+    return result;
+}
+
+static u32 skip_space(piece_list *list, base_iter *last_location, u32 cy)
+{
+    u32 result = 0;
+    base_iter iter = find_line(list, last_location, cy);
+    str s = {};
+    while (base_next_pred(list, &iter, is_white_space, s)) 
+    {
+        result++;
+    }
+    return result;
+}
+
+static u32 get_line_len(piece_list *list, base_iter *last_location, u32 line)
+{
+    base_iter iter = find_line(list, last_location, line);
+    u32 len = 0;
+
+    while (base_next_cell_(list, &iter) && line_number(&iter) == line)
+    {
+        len++;
+    }
+
+    return len;
 }
 
 static iter_range range_search(
@@ -392,7 +485,6 @@ static buffer_range find_boundary(
     base_iter copy_iter = find_cursor(list, last_location, cursor);
     base_iter iter = copy_iter;
 
-
     buffer_cursor back = cursor;
 
     // Find back cursor, 
@@ -505,155 +597,12 @@ static buffer_range find_boundary(
         result.one_past_end = second_best_last;
     }
 
-
     return result;
 }
 
-static u32 find_char(
-    piece_list *list,
-    base_iter *last_location,
-    str match,
-    u32 count,
-    buffer_cursor cursor)
-{
-    u32 result = 0;
-    base_iter iter = find_cursor(list, last_location, cursor);
+/* ------------------------------------ Piece List Operations --------------------------------- */
 
-    for (; count > 0;)
-    {
-        if (!base_next_cell_(list, &iter))
-        {
-            result = 0;
-            break;
-        }
-
-        str s = get_char_utf8(list, &iter);
-
-        if ((s.len == 1) && (memcmp(s.buffer, "\n", 1) == 0))
-        {
-            result = 0;
-            break;
-        }
-
-        result++;
-        if ((match.len == s.len) && 
-            (memcmp(match.buffer, s.buffer, match.len) == 0))
-        {
-            count--;
-        }
-    }
-    return result + cursor.x;
-}
-
-static buffer_cursor find_word_back(
-    piece_list *list,
-    base_iter *last_location,
-    u32 count,
-    buffer_cursor cursor)
-{
-    buffer_cursor result = cursor;
-    base_iter iter = find_cursor(list, last_location, cursor);
-
-    b32 normal_exit = false;
-    for (; count > 0; )
-    {
-        // skip non_space;
-        while (base_prev_cell(list, &iter))
-        {
-            str s = get_char_utf8(list, &iter);
-            Assert(s.len);
-            // NOTE: IMCOMPLETE/WRONG
-            if (!(s.buffer[0] == ' ' || s.buffer[0] == '\t' || s.buffer[0] == '\n'))
-            {
-                normal_exit |= true;
-                break;
-            }
-        }
-        // skip space
-        while (base_prev_cell(list, &iter))
-        {
-            normal_exit = false;
-            str s = get_char_utf8(list, &iter);
-            Assert(s.len);
-            if (s.buffer[0] == ' ' || s.buffer[0] == '\t' || s.buffer[0] == '\n')
-            {
-                normal_exit |= true;
-                break;
-            }
-        }
-
-        count--;
-    }
-
-    if (normal_exit)
-    {
-        b32 valid = base_next_cell_(list, &iter);
-        Assert(valid);
-    }
-    result = get_cursor(list, &iter);
-    return result;
-}
-
-static buffer_cursor find_word(
-    piece_list *list, 
-    base_iter *last_location,
-    u32 count,
-    buffer_cursor cursor)
-{
-    buffer_cursor result = cursor;
-    base_iter iter = find_cursor(list, last_location, cursor);
-
-    for(; count > 0;)
-    {
-        // skip non_space
-        do 
-        {
-            str s = get_char_utf8(list, &iter);
-            Assert(s.len);
-            result.x++;
-            // NOTE: IMCOMPLETE/WRONG
-            if (s.buffer[0] == ' ' || s.buffer[0] == '\t' || s.buffer[0] == '\n')
-            {
-                if (s.buffer[0] == '\n')
-                {
-                    result.x = 0;
-                    result.y++;
-                }
-                // else
-                // {
-                //     result.x++;
-                // }
-                break;
-            }
-        } while (base_next_cell_(list, &iter));
-        // skip space;
-        while (base_next_cell_(list, &iter))
-        {
-            str s = get_char_utf8(list, &iter);
-            Assert(s.len);
-            // NOTE: IMCOMPLETE/WRONG
-            if (!(s.buffer[0] == ' ' || s.buffer[0] == '\t' || s.buffer[0] == '\n'))
-            {
-                break;
-            }
-            if (s.buffer[0] == '\n')
-            {
-                result.x = 0;
-                result.y++;
-            }
-            else
-            {
-                result.x++;
-            }
-        }
-
-        count--;
-    }
-    return result;
-}
-
-
-static inline void maybe_merge_with_next(piece_list *list, segmented_node *node)
+static void maybe_merge_with_next(piece_list *list, segmented_node *node)
 {
     segmented_node *next_node = node->next;
     if (next_node != &list->root_sentinel)
@@ -691,7 +640,6 @@ static inline void maybe_merge_with_next(piece_list *list, segmented_node *node)
                 next_node->size -= piece.size;
                 next_node->lcnt -= piece.lcnt;
             }
-
             node->count += right_to_left_transfer_count;
             next_node->count -= right_to_left_transfer_count;
 
@@ -702,7 +650,8 @@ static inline void maybe_merge_with_next(piece_list *list, segmented_node *node)
     }
 }
 
-static inline void append(piece_list  *list, piece *pieces, u32 num_pieces)
+#if TESTS
+static void append(piece_list  *list, piece *pieces, u32 num_pieces)
 {
     u32 const num_alloc = 1 + (num_pieces / (MAX_PIECES_PER_NODE - 1));
     u32 const pieces_per_node = num_pieces / num_alloc;
@@ -731,8 +680,9 @@ static inline void append(piece_list  *list, piece *pieces, u32 num_pieces)
         DLIST_INSERT_TAIL(&list->root_sentinel, new_node);
     }
 }
+#endif
 
-static inline void copy_serialized(
+static void copy_serialized(
     piece_list *list,
     cursor start,
     u32 start_offset,
@@ -1292,11 +1242,7 @@ static cursor make_space(piece_list *list, cursor start, cursor end, u32 size)
     return result;
 }
 
-static void insert_many(
-    piece_list *list,
-    cursor at,
-    piece_slice *slices,
-    u32 num_slices)
+static void insert_many(piece_list *list, cursor at, piece_slice *slices, u32 num_slices)
 {
     for (u32 i = 0; i < num_slices; ++i)
     {
@@ -1345,7 +1291,8 @@ static void replace(piece_list *list, cursor start, cursor end, piece *pieces, u
     insert_many(list, cursor, p_slice, ArrayCount(p_slice));
 }
 
-static void write_piece_text(piece_list *list, piece_slice p_slice, string *buf)
+#if TESTS
+static void write_piece_to_text(piece_list *list, piece_slice p_slice, string *buf)
 {
     Assert(buf->len == 0);
     for (u32 i = 0; i < p_slice.count; ++i)
@@ -1358,6 +1305,7 @@ static void write_piece_text(piece_list *list, piece_slice p_slice, string *buf)
         push_string(buf, src);
     }
 }
+#endif
 
 static piece serialize_piece_range_to(piece_list *a, piece_list *b, piece_slice p_slice)
 {
@@ -1466,9 +1414,15 @@ static void yank(piece_list *list, p_buffer *buffer, buffer_cursor c0, buffer_cu
 
 }
 
-static void replace_range(piece_list *list, base_iter start, base_iter end, piece_slice inserted_pieces, piece_slice undo_buffer)
+static void replace_range(
+    piece_list *list,
+    base_iter start,
+    base_iter end,
+    piece_slice inserted_pieces,
+    piece_slice undo_buffer)
 
 {
+    list->up_to_date = false;
     cursor start_cursor = { start.node, start.piece_idx };
     cursor end_cursor   = { end.node, end.piece_idx };
     cursor cursor = end_cursor;
@@ -1636,14 +1590,13 @@ static void initialize_piece_list(piece_list *list, u8 *original_text, u32 origi
     list->changed_since_last_search = true;
     list->last_searched_string.len = 0;
     list->last_searched_string.buffer = NULL;
-    list->replaced = false;
     list->replace_len = 0;
 
     base_init(list, Position, &list->iter);
     INIT_LIST_HEAD(&list->window_sentinel);
 }
 
-static inline void init_buffer(piece_list *list, char *filepath)
+static void init_buffer(piece_list *list, char *filepath)
 {
     u8 *original_text = 0;
     u32 original_text_len = 0;
@@ -1668,7 +1621,7 @@ static inline void init_buffer(piece_list *list, char *filepath)
     initialize_piece_list(list, original_text, original_text_len);
 }
 
-static inline void write_buffer_to_file(piece_list *list)
+static void write_buffer_to_file(piece_list *list)
 {
     if (list->filepath)
     {
@@ -1706,7 +1659,7 @@ static inline void write_buffer_to_file(piece_list *list)
 }
 
 // NOTE: THIS IS VERY UNOPTIMISED
-static inline void search_str(piece_list *list, str search_string)
+static void search_str(piece_list *list, str search_string)
 {
     Assert(search_string.len > 0);
     u32 current_match_cursor = 0;
@@ -1834,19 +1787,20 @@ start:
     }
 }
 
-static inline piece_list *create_buffer(memory_arena *arena, char *filepath)
+static piece_list *create_buffer(memory_arena *arena, char *filepath)
 {
     piece_list *buffer = PushStruct(arena, piece_list, NoClear());
     init_buffer(buffer, filepath);
     return buffer;
 }
 
-static inline void initialize_piece_list_s(piece_list *list, string original)
+#if TESTS
+static void initialize_piece_list_s(piece_list *list, string original)
 {
     initialize_piece_list(list, original.buffer, original.len);
 }
 
-static inline void write_to_buffer(piece_list *list, u8 *buf, u32 len)
+static void write_to_buffer(piece_list *list, u8 *buf, u32 len)
 {
     Assert(len >= list->size);
     u32 cursor = 0;
@@ -1865,7 +1819,6 @@ static inline void write_to_buffer(piece_list *list, u8 *buf, u32 len)
     }
 }
 
-#if TESTS
 
 static b32 freelist_sanity_check(piece_list *list)
 {
@@ -2181,7 +2134,7 @@ static inline b32 rand_replace(piece_list *list, prng *prng)
     return true;
 }
 
-static inline piece_list *rand_list(prng *prng)
+static piece_list *rand_list(prng *prng)
 {
     piece_list *list = BootstrapPushStruct(piece_list, list_arena, 4096);
 

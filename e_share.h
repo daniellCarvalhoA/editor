@@ -1,27 +1,10 @@
-
 /*-------------------------------- UTILITIES -----------------------------*/
-
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include "e_core.h"
-
-typedef int8_t int8;
-typedef int16_t int16;
-typedef int32_t int32;
-typedef int64_t int64;
-typedef int32 bool32;
-
-typedef uint8_t uint8;
-typedef uint16_t uint16;
-typedef uint32_t uint32;
-typedef uint64_t uint64;
-typedef __uint128_t u128;
-
-typedef intptr_t intptr;
-typedef uintptr_t uintptr;
 
 typedef size_t memory_index;
     
@@ -30,24 +13,32 @@ typedef float r32;
 typedef double real64;
 typedef double r64;
     
-typedef int8 i8;
-typedef int16 i16;
-typedef int32 i32;
-typedef int64 i64;
-typedef bool32 b32;
+typedef int8_t i8;
+typedef int16_t i16;
+typedef int32_t i32;
+typedef int64_t i64;
+typedef uint32_t b32;
+typedef uint16_t b16;
 
-typedef uint8 u8;
-typedef uint16 u16;
-typedef uint32 u32;
-typedef uint64 u64;
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint64_t u64;
+typedef __uint128_t u128;
 
-typedef real32 r32;
-typedef real64 r64;
+typedef float f32;
+typedef double f64;
 
 typedef uintptr_t umm;
-typedef u8 b8;
-typedef u8 b16;
 
+#define Assert(expression) if(!(expression))\
+  { fprintf(stderr, "Assert failed in: %d of file: %s\n", __LINE__, __FILE__); *(int *)0 = 0; }
+
+#define Minimum(A, B) (((A) < (B)) ? (A) : (B))
+#define Maximum(A, B) (((A) > (B)) ? (A) : (B))
+
+#include "math.h"
+#include "memory.h"
 
 #define ArrayCount(array) (sizeof(array) / sizeof((array)[0]))
 
@@ -56,16 +47,13 @@ typedef u8 b16;
 #define Gigabytes(value) (Megabytes(value) * 1024LL)
 #define Terabytes(value) (Gigabytes(value) * 1024LL)
 
-#define Assert(expression) if(!(expression))\
-  { fprintf(stderr, "Assert failed in: %d of file: %s\n", __LINE__, __FILE__); *(int *)0 = 0; }
-
 #include "g_array.h"
 #include "string.h"
 
+#define Default 0
+#define Reversed 1
 #define TEST(name) 
 
-#define Minimum(A, B) (((A) < (B)) ? (A) : (B))
-#define Maximum(A, B) (((A) > (B)) ? (A) : (B))
 
 #define LIST_INSERT(head, node) \
     (node)->next = (head); \
@@ -150,11 +138,6 @@ typedef u8 b16;
 
 
 static u32 str_len(const char *str);
-
-// Remember to implement memcpy, memset, memmove!!!.
-
-
-
 
 static string char_str_to_string(char *str)
 {
@@ -279,5 +262,93 @@ static b32 strings_are_equal(const char *a, const char *b)
     {
         return false;
     }
-
 }
+
+typedef enum
+{
+    RenderCommand_Text,
+    RenderCommand_Rect,
+    RenderCommand_VLine,
+    RenderCommand_HLine,
+} render_command_type;
+
+
+typedef u8 color;
+
+
+typedef struct
+{
+    render_command_type type;
+    color color;
+
+    union
+    {
+        struct
+        {
+            u32 row;
+            u32 col;
+            str text;
+        } text;
+
+        struct
+        {
+            u32 row;
+            u32 col;
+        } cursor;
+
+        struct 
+        {   
+            u32 dim;
+            u32 low;
+            u32 len;
+        } line;
+    };
+} render_command;
+
+typedef struct
+{
+    render_command *commands;
+    u32 count;
+    u32 capacity;
+} render_commands;
+
+typedef struct render_view
+{
+    u32 top_margin;
+    u32 bot_margin;
+
+    u32 left_margin;
+    u32 right_margin;
+
+    u32 rows_above_cursor;
+    u32 rows_below_cursor;
+
+    u32 cols_left_of_cursor;
+    u32 cols_right_of_cursor;
+} render_view;
+
+
+// NOTE: Rendering protocol, the renderer ask the dll to write to a grid given a rendering view
+// a rendering.
+
+
+
+
+
+#define START_RENDER_COMMAND_ALLOCATION_SIZE 1024
+
+static render_commands allocate_render_commands(memory_arena *arena)
+{
+    render_commands result = {
+        .commands = PushArray(arena, START_RENDER_COMMAND_ALLOCATION_SIZE, render_command, NoClear()),
+        .capacity = START_RENDER_COMMAND_ALLOCATION_SIZE
+    };
+    return result;
+}
+
+static void push_render_command(memory_arena *arena, render_commands *commands, render_command command)
+{
+    Assert(commands->capacity >= commands->count);
+    commands->commands[commands->count++] = command;
+}
+

@@ -54,12 +54,6 @@ static inline slice get_space_for_size(Undo_Records *records, u32 size)
             result.index = 0;
         }
     }
-    // if (records->last_top == 0 && records->first == 0)
-    // {
-    //     Assert(records->last_top == 0);
-    //     result.count = UNDO_RECORDS_SIZE;
-    //     result.index = 0;
-    // }
     else if (records->last_top > records->first)
     {
         u32 top_free = UNDO_RECORDS_SIZE - records->last_top;
@@ -147,7 +141,6 @@ static inline u8 *allocate(Undo_Records *records, u32 size)
 
     records->state = AllocationError;
     return NULL;
-
 }
 
 static inline void begin_undo_sequence(Undo_Records *records, u32 position)
@@ -289,26 +282,6 @@ static inline record_iter get_records(Undo_Records *records)
     return result;
 }
 
-// NOTE: Most record slices will have small sizes (between 1 and 2), 
-// with the exception of large search and replace operations.
-// When we make an undo we must iterate from the last undo record to 
-// the most recent. Right now this operation will be O (n²) where 
-// n is the number of records in a slice.
-// This is because we don't have back pointers inside the records themselvs, 
-// so to reach the last record we must find it starting with the first.
-// This takes O (n + (n - 1) + (n - 2) ...) = O ((n * (n + 1)) / 2);
-//
-// If this becomes a problem we can either put back pointers in the 
-// records, making iterating over n records take O (n) at the cost 
-// of more memory, or splitting iteration over two passes.
-//
-//  1> first allocate temporary memory to hold slice->count indexes, 
-//  and iterate over the slice to save thoses indexes.
-//  2> Use the the saved indexes to iterate backwards.
-//
-//  This would take O (2 * n) and some temporary memory for each iteration.
-
-
 static inline undo_record *get_record(record_iter *iter)
 {
     undo_record *result = iter->last_record;
@@ -316,21 +289,6 @@ static inline undo_record *get_record(record_iter *iter)
     {
         iter->last_record = get_prev_record(iter->records, result);
     }
-
-    // iter.last_record = get_prev_record
-    // undo_record *result = NULL;
-    // 
-    // if (iter->count > 0)
-    // {
-    //     result = iter->first_record;
-    //
-    //     for (u32 i = 0; i < iter->count - 1; ++i)
-    //     {
-    //         result = get_next_record(iter->records, result);
-    //     }
-    //
-    //     iter->count--;
-    // }
     return result;
 }
 
@@ -367,7 +325,7 @@ static inline void undo_once(
     reset_cursor(list, &list->iter);
 }
 
-static inline void undo(window *win)
+static void undo(window *win)
 {
     piece_list *list = win->buffer;
     record_iter iter = get_records(&list->undo_records);
@@ -394,11 +352,9 @@ static inline void undo(window *win)
     win->bc = new_cursor;
 
     end_undo_sequence(&list->redo_records, NULL);
-
-
 }
 
-static inline void redo(window *win)
+static void redo(window *win)
 {
     piece_list *list = win->buffer;
     record_iter iter = get_records(&list->redo_records);
@@ -425,6 +381,4 @@ static inline void redo(window *win)
     end_undo_sequence(&list->undo_records, NULL);
 
 }
-
-// static inline void redo(window *win)
 

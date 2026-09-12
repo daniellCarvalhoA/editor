@@ -1,6 +1,10 @@
 
 static window *create_window(screen *screen, layout layout, win_flags flags)
 {
+    if (layout == LeafBuffer)
+    {
+        screen->num_leaf_windows++;
+    }
     window *win = 0;
     if (list_is_empty(&screen->first_free_window))
     {
@@ -21,7 +25,6 @@ static window *create_window(screen *screen, layout layout, win_flags flags)
     INIT_LIST_HEAD(&win->first_child);
     return win;
 }
-
 
 static inline void set_window_vertical_dim(window *win, u16 y, u16 height)
 {
@@ -161,7 +164,7 @@ static u32 window_intersection_horizontal(screen *screen, window *root, u32 y, w
                     total += window_intersection_horizontal(screen, child, y, result + total, result_len);
                 }
             }
-        } break;
+       } break;
     }
     Assert(total < result_len);
 
@@ -246,6 +249,7 @@ static void move_vertical(screen *screen, u32 count, b32 down)
     return;
 }
 
+#if 1
 static u32 intersections_up_horizontal(
     screen *screen, window *win, u16 y, u16 x_min, u16 x_max, u16 *x_points, u32 max_len)
 {
@@ -471,110 +475,115 @@ static u32 intersections_right_vertical(
     return total;
 }
 
-static void draw_borders(screen *screen, window *win)
+static void draw_borders(memory_arena *render_arena, render_commands *r_commands, screen *screen, window *win)
 {
     grid_view s_view = screen_view(screen);
     switch (win->layout)
     {
          case Vertical:
          {
-             window *prev = 0;
+             // window *prev = 0;
              window *child;
-
-             u16 w_width    = get_width(screen, win); 
-             u16 w_screen_x = get_screen_x(screen, win);
+ //
+ //             u16 w_width    = get_width(screen, win); 
+ //             u16 w_screen_x = get_screen_x(screen, win);
              list_for_each_entry(child, &win->first_child, sibling)
-             {
-                 if (prev)
-                 {
-                     // Make this dynamic or track number of total children, and 
-                     // make that the maximum size; 
-                     u16 p_screen_y = get_screen_y(screen, prev);
-                     u16 c_screen_y = get_screen_y(screen, child);
-                     u16 p_height   = get_height(screen, prev);
-
-                     u16 up_x_points[16];
-                     u16 down_x_points[16];
-
-                     u16 num_up_points = intersections_up_horizontal(
-                         screen,
-                         prev,
-                         p_screen_y + p_height,
-                         w_screen_x,
-                         w_screen_x + w_width,
-                         up_x_points,
-                         ArrayCount(up_x_points));
-
-                     u16 num_down_points = intersections_down_horizontal(
-                         screen,
-                         child,
-                         c_screen_y,
-                         w_screen_x,
-                         w_screen_x + w_width,
-                         down_x_points,
-                         ArrayCount(down_x_points));
-                      
-                     u16 row = c_screen_y - 1;
-                     u16 up_index = 0;
-                     u16 down_index = 0;
-
-                     grid_line g_line = get_grid_line(s_view, row);
-                     place_cursor(screen, row, w_screen_x);
-                     for (u16 i = w_screen_x; i < w_screen_x + w_width; i++)
-                     {
-                         b16 is_in_up = false; 
-                         for (u16 j = up_index; j < num_up_points; ++j)
-                         {
-                             is_in_up |= up_x_points[j] == i;
-                         }
- 
-                         b16 is_in_down = false;
-                         for (u16 j = down_index; j < num_down_points; j++)
-                         {
-                             is_in_down |= down_x_points[j] == i;
-                         }
- 
-                         str s;
-                         if (is_in_up && is_in_down)
-                         {
-                             up_index++;
-                             down_index++;
-                             s = STR_LIT("┼");
-                         }
-                         else if (is_in_up)
-                         {
-                             s = STR_LIT("┴");
-                             up_index++;
-                         } 
-                         else if (is_in_down)
-                         {
-                             s = STR_LIT("┬");
-                             down_index++;
-                         }
-                         else
-                         {
-                             s = STR_LIT("─");
-                         }
-
-                         grid_type type = U32;
-                         if (s.len <= 3)
-                         {
-                             type = s.len - 1;
-                         }
-
-                         g_line.grid->types[g_line.line_start + i] = type;
-                         u8 *data = get_cell_data(g_line, i, type);
-                         attr *at = get_cell_attr_(g_line, i);
-
-                         memcpy(data, s.buffer, s.len);
-                         *at = Default;
-
-                         write_string(screen, s);
-                     }
-                 }
-                 draw_borders(screen, child);
-                 prev = child;
-             }
+ //             {
+ //                 if (prev)
+ //                 {
+ //                     // Make this dynamic or track number of total children, and 
+ //                     // make that the maximum size; 
+ //                     u16 p_screen_y = get_screen_y(screen, prev);
+ //                     u16 c_screen_y = get_screen_y(screen, child);
+ //                     u16 p_height   = get_height(screen, prev);
+ //
+ //                     u16 up_x_points[16];
+ //                     u16 down_x_points[16];
+ //
+ //                     u16 num_up_points = intersections_up_horizontal(
+ //                         screen,
+ //                         prev,
+ //                         p_screen_y + p_height,
+ //                         w_screen_x,
+ //                         w_screen_x + w_width,
+ //                         up_x_points,
+ //                         ArrayCount(up_x_points));
+ //
+ //                     u16 num_down_points = intersections_down_horizontal(
+ //                         screen,
+ //                         child,
+ //                         c_screen_y,
+ //                         w_screen_x,
+ //                         w_screen_x + w_width,
+ //                         down_x_points,
+ //                         ArrayCount(down_x_points));
+ //                      
+ //                     u16 row = c_screen_y - 1;
+ //                     u16 up_index = 0;
+ //                     u16 down_index = 0;
+ //
+ //                     grid_line g_line = get_grid_line(s_view, row);
+ //
+ //                     // render_command command = {
+ //                     //
+ //                     //
+ //                     // };
+ //                     place_cursor(screen, row, w_screen_x);
+ //                     for (u16 i = w_screen_x; i < w_screen_x + w_width; i++)
+ //                     {
+ //                         b16 is_in_up = false; 
+ //                         for (u16 j = up_index; j < num_up_points; ++j)
+ //                         {
+ //                             is_in_up |= up_x_points[j] == i;
+ //                         }
+ // 
+ //                         b16 is_in_down = false;
+ //                         for (u16 j = down_index; j < num_down_points; j++)
+ //                         {
+ //                             is_in_down |= down_x_points[j] == i;
+ //                         }
+ // 
+ //                         str s;
+ //                         if (is_in_up && is_in_down)
+ //                         {
+ //                             up_index++;
+ //                             down_index++;
+ //                             s = STR_LIT("┼");
+ //                         }
+ //                         else if (is_in_up)
+ //                         {
+ //                             s = STR_LIT("┴");
+ //                             up_index++;
+ //                         } 
+ //                         else if (is_in_down)
+ //                         {
+ //                             s = STR_LIT("┬");
+ //                             down_index++;
+ //                         }
+ //                         else
+ //                         {
+ //                             s = STR_LIT("─");
+ //                         }
+ //
+ //                         grid_type type = U32;
+ //                         if (s.len <= 3)
+ //                         {
+ //                             type = s.len - 1;
+ //                         }
+ //
+ //                         g_line.grid->types[g_line.line_start + i] = type;
+ //                         u8 *data = get_cell_data(g_line, i, type);
+ //                         attr *at = get_cell_attr_(g_line, i);
+ //
+ //                         memcpy(data, s.buffer, s.len);
+ //                         *at = Default;
+ //
+ //                         write_string(screen, s);
+ //                     }
+ //                 }
+             draw_borders(render_arena, r_commands, screen, child);
+                 // prev = child;
+             // }
          } break;
 
          case Horizontal:
@@ -590,71 +599,84 @@ static void draw_borders(screen *screen, window *win)
                  {
                      // Make this dynamic or track number of total children, and 
                      // make that the maximum size; 
-                     u16 left_y_points[16];
-                     u16 right_y_points[16];
-
-                     u16 p_screen_x = get_screen_x(screen, prev);
+                     // u16 left_y_points[16];
+                     // u16 right_y_points[16];
+                     //
+                     // u16 p_screen_x = get_screen_x(screen, prev);
                      u16 c_screen_x = get_screen_x(screen, child);
-                     u16 p_width    = get_width(screen, prev);
-
-                     u16 num_left_points  = intersections_left_vertical(
-                            screen,
-                            prev,
-                            p_screen_x + p_width,
-                            w_screen_y,
-                            w_screen_y + w_height,
-                            left_y_points,
-                            ArrayCount(left_y_points));
-
-                     u16 num_right_points = intersections_right_vertical(
-                            screen,
-                            child,
-                            c_screen_x,
-                            w_screen_y,
-                            w_screen_y + w_height,
-                            right_y_points,
-                            ArrayCount(right_y_points));
+                     // u16 p_width    = get_width(screen, prev);
+                     //
+                     // u16 num_left_points  = intersections_left_vertical(
+                     //        screen,
+                     //        prev,
+                     //        p_screen_x + p_width,
+                     //        w_screen_y,
+                     //        w_screen_y + w_height,
+                     //        left_y_points,
+                     //        ArrayCount(left_y_points));
+                     //
+                     // u16 num_right_points = intersections_right_vertical(
+                     //        screen,
+                     //        child,
+                     //        c_screen_x,
+                     //        w_screen_y,
+                     //        w_screen_y + w_height,
+                     //        right_y_points,
+                     //        ArrayCount(right_y_points));
                      
                      u16 col = c_screen_x - 1;
-                     u16 left_index = 0;
-                     u16 right_index = 0;
+                     // u16 left_index = 0;
+                     // u16 right_index = 0;
+                     render_command command = {
+                         .type = RenderCommand_VLine,
+                         .line = { col, w_screen_y, w_height }
+                         // .dim = col,
+                         // .low = w_screen_y,
+                         // .len = w_height,
+                     };
+
+                     push_render_command(render_arena, r_commands, command);
+                     // grid_line g_line = get_grid_line(s_view, row);
+
+                     // write_string(screen,  s);
+
                      for (u16 j = w_screen_y; j < w_screen_y + w_height; ++j)
                      {
                          grid_line g_line = get_grid_line(s_view, j); 
-                         b16 is_in_left = false; 
-                         for (u16 i = left_index; i < num_left_points; ++i)
-                         {
-                             is_in_left |= left_y_points[i] == j;
-                         }
- 
-                         b16 is_in_right = false;
-                         for (u16 i = right_index; i < num_right_points; i++)
-                         {
-                             is_in_right |= right_y_points[i] == j;
-                         }
- 
-                         place_cursor(screen, j, col);
-                         str s;
-                         if (is_in_left && is_in_right)
-                         {
-                             left_index++;
-                             right_index++;
-                             s = STR_LIT("┼");
-                         }
-                         else if (is_in_left)
-                         {
-                             s = STR_LIT("┤");
-                             left_index++;
-                         } 
-                         else if (is_in_right)
-                         {
-                             s = STR_LIT("├");
-                             right_index++;
-                         }
-                         else
-                         {
-                             s = STR_LIT("│");
-                         }
+                         // b16 is_in_left = false; 
+                         // for (u16 i = left_index; i < num_left_points; ++i)
+                         // {
+                         //     is_in_left |= left_y_points[i] == j;
+                         // }
+                         //
+                         // b16 is_in_right = false;
+                         // for (u16 i = right_index; i < num_right_points; i++)
+                         // {
+                         //     is_in_right |= right_y_points[i] == j;
+                         // }
+
+                         // place_cursor(screen, j, col);
+                         str s = s = STR_LIT("│");
+                         // if (is_in_left && is_in_right)
+                         // {
+                         //     left_index++;
+                         //     right_index++;
+                         //     s = STR_LIT("┼");
+                         // }
+                         // else if (is_in_left)
+                         // {
+                         //     s = STR_LIT("┤");
+                         //     left_index++;
+                         // } 
+                         // else if (is_in_right)
+                         // {
+                         //     s = STR_LIT("├");
+                         //     right_index++;
+                         // }
+                         // else
+                         // {
+                         //     s = STR_LIT("│");
+                         // }
 
                          grid_type type = U32;
                          if (s.len <= 3)
@@ -668,10 +690,10 @@ static void draw_borders(screen *screen, window *win)
 
                          memcpy(data, s.buffer, s.len);
                          *at = Default;
-                         write_string(screen,  s);
+                         // write_string(screen,  s);
                      }
                 }
-                draw_borders(screen, child);
+                draw_borders(render_arena, r_commands, screen, child);
                 prev = child;
             }
          } break;
@@ -682,6 +704,8 @@ static void draw_borders(screen *screen, window *win)
     }
 }
 
+#endif
+
 static void update_layout(screen *screen, window *root)
 {
     u32 num_separators = root->num_children - (root->num_fixed + 1);
@@ -689,7 +713,7 @@ static void update_layout(screen *screen, window *root)
     {
         case Vertical:
         {
-            u16 total_height      = get_dyn_height(screen, root) - num_separators;
+            u16 total_height      = get_dyn_height(screen, root); //  - num_separators;
             u16 height_per_window = total_height / (root->num_children - root->num_fixed);
             u16 rem               = total_height % (root->num_children - root->num_fixed);;
             u16 y                 = get_screen_y(screen, root);
@@ -713,7 +737,7 @@ static void update_layout(screen *screen, window *root)
                 }
                 set_window_vertical_dim(win, y, this_win_height);
 
-                y += this_win_height + 1;
+                y += this_win_height;
 
                 if (win->buffer)
                 {
@@ -769,6 +793,30 @@ static void update_layout(screen *screen, window *root)
     }
 }
 
+static window *find_first_leaf_from(window *win)
+{
+    window *child;
+    list_for_each_entry(child, &win->first_child, sibling)
+    {
+        if (child->layout == LeafCommand)
+        {
+            continue;
+        }
+
+        if (child->layout == LeafBuffer)
+        {
+            return child;
+        }
+
+        window *result = find_first_leaf_from(child);
+        if (result)
+        {
+            return result;
+        }
+    }
+    return NULL;
+}
+
 static void close_active_window(screen *screen)
 {
     window **active_window = &screen->active_window;
@@ -778,54 +826,74 @@ static void close_active_window(screen *screen)
 
     piece_list *buffer = (*active_window)->buffer;
     Assert(buffer->num_windows > 0);
+
     buffer->num_windows--;
-
-    if (parent->num_children - parent->num_fixed > 2)
+    screen->num_leaf_windows--;
+    if (!screen->num_leaf_windows)
     {
-        dlist *new_active_window_list = (*active_window)->sibling.next;
-        if (new_active_window_list == &parent->first_child)
-        {
-            new_active_window_list = new_active_window_list->next;
-        }
-        list_del(&(*active_window)->sibling);
-        list_del(&(*active_window)->next_in_buffer);
-        list_add(&(*active_window)->sibling, &screen->first_free_window);
-        *active_window = list_entry(new_active_window_list, window, sibling);
-
-        parent->num_children--;
+        return;
     }
-    else
+    // Remove the active window from the layout tree;
+    list_del(&(*active_window)->sibling);
+    // Disassociate the active window with its buffer;
+    list_del(&(*active_window)->next_in_buffer);
+    // Add active window to to the free list.
+    list_add(&(*active_window)->sibling, &screen->first_free_window);
+
+    *active_window = find_first_leaf_from(parent);
+    Assert(*active_window);
+
+    parent->num_children--;
+
+    if (parent->num_children == 1)
     {
-        // Remove the active window from the layout tree;
-        list_del(&(*active_window)->sibling);
-        // Disassociate the active window with its buffer;
-        list_del(&(*active_window)->next_in_buffer);
-
-        // Add active window to to the free list.
-        list_add(&(*active_window)->sibling, &screen->first_free_window);
-
         Assert(is_singleton(&parent->first_child));
-        dlist *last_and_first_child = parent->first_child.next;
-        // replace the parent with its last_and_first_child;
-        list_replace(&parent->sibling, last_and_first_child);
 
-        // Add the parent to the free list;
+        window *grand_parent = parent->parent;
+
+        dlist *child = parent->first_child.next;
+        window *child_win = list_entry(child, window, sibling);
+
+        // Replace the parent with its first and only child
+        list_replace(&parent->sibling, child);
+        // Add parent to the free list;
         list_add(&parent->sibling, &screen->first_free_window);
 
-        // make the last_and_first_child the current active_window;
-        *active_window = list_entry(last_and_first_child, window, sibling);
-        (*active_window)->parent = parent->parent; 
+        child_win->parent = grand_parent;
 
-        if (!(*active_window)->parent)
+        // If child is not a leaf node and the grand_parents layout is 
+        // equal to the parents layout we must replace the child with its 
+        // children
+        if (grand_parent && grand_parent->layout == child_win->layout)
         {
-            screen->root_window = *active_window;
+            // First set parent pointers
+            window *win;
+            list_for_each_entry(win, &child_win->first_child, sibling)
+            {
+                win->parent = grand_parent;
+            }
+
+            // NOTE: make this a function in lists.h
+            //
+            dlist *first_grand_child = child_win->first_child.next;
+            dlist *last_grand_child = child_win->first_child.prev;
+
+            child_win->sibling.prev->next = first_grand_child;
+            first_grand_child->prev = child_win->sibling.prev;
+
+            child_win->sibling.next->prev = last_grand_child;
+            last_grand_child->next = child_win->sibling.next;
+
+            // We replaced the child so we must free it.
+            list_add(child, &screen->first_free_window);
+
+            grand_parent->num_children += child_win->num_children - 1;
         }
     }
 
     if (buffer->num_windows == 0)
     {
         // Decide whether or not to free the buffer.
-        // list_del(&buffer->list);
     }
 
     update_layout(screen, screen->root_window);
@@ -1043,7 +1111,7 @@ static void attach_window(screen *screen, window *new, window *old, layout layou
     {
         Assert(fixed_dim < parent->full_dim - (parent->fixed_dim + parent->num_children));
         new->full_dim    = fixed_dim;
-        parent->fixed_dim = (new->full_dim + 1);
+        parent->fixed_dim = (new->full_dim);
         parent->num_fixed++;
     }
 
@@ -1082,7 +1150,7 @@ static inline void reset_window_cursor(screen *screen, mode edit_mode)
     win->cy = window_cy;
 }
 
-static void render_command_window(screen *screen)
+static void render_command_window(screen *screen, memory_arena *render_arena, render_commands *r_commands)
 {
     window *win = screen->command_window;
     u16 w_height = get_height(screen, win);
@@ -1098,31 +1166,30 @@ static void render_command_window(screen *screen)
         grid_view new_view = default_grid_view(&m_grid, screen_y, screen_x, w_height, w_width);
 
         fill_command_grid(screen, win, new_view);
-        grid_diff(screen, win, win->view, new_view);
+        grid_diff(screen, render_arena, r_commands, win, win->view, new_view);
         free_grid_view(new_view);
     }
 }
 
 #define APRIN 4
 
-static void render_window(window *win, screen *screen, mode edit_mode)
+static void render_window(window *win, memory_arena *render_arena, render_commands *r_commands, render_view view, screen *screen, mode edit_mode)
 {
     u16 w_height   = get_height(screen, win);
     u16 w_width    = get_width(screen, win);
 
-    if (((win == screen->active_window) || (win == interacting_window)) && 
-            win->layout == LeafBuffer)
+    if (((win == screen->active_window) || (win == interacting_window)) && win->layout == LeafBuffer)
     {
         u32 height = (win->flags & WinFlags_StatusLineVisible) ?
             (w_height - 1) :
             w_height;
 
-        if (clamped_add(win->bc.y, APRIN, win->buffer->lcnt) >= win->top_line + height) 
+        if (clamped_add(win->bc.y, view.bot_margin, win->buffer->lcnt) >= win->top_line + height) 
         {
             win->top_line += 1 + (clamped_add(win->bc.y, APRIN, win->buffer->lcnt)) - (win->top_line + height);
             win->change |= Render_ScrollChange;
         } 
-        else if (saturating_sub(win->bc.y, APRIN) < win->top_line)
+        else if (saturating_sub(win->bc.y, view.top_margin) < win->top_line)
         {
             win->top_line = saturating_sub(win->bc.y, APRIN);
             win->change |= Render_ScrollChange;
@@ -1152,7 +1219,7 @@ static void render_window(window *win, screen *screen, mode edit_mode)
 
         fill_grid(screen, win, new_view, edit_mode);
 
-        grid_diff(screen, win, win->view, new_view);
+        grid_diff(screen, render_arena, r_commands, win, win->view, new_view);
 
         free_grid_view(new_view);
     }

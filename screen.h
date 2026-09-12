@@ -26,25 +26,30 @@ typedef struct screen
     u16 cols;
 
     multilevel_grid grid; 
-    u32 cursor;
-    u8 buffer[8192];
 
+    // u32 cursor;
+    // u8 buffer[8192];
+
+    u32 num_leaf_windows;
     window *root_window;
     window *command_window;
     window *active_window;
+
     dlist first_free_window;
 
 } screen;
 
 #define MAX_NUM_WINDOWS 32
 
-static void place_cursor(screen *screen, u32 y, u32 x);
-static void write_string(screen *screen, str s);
-static void set_color(screen *screen, u32 color);
-static void reset_color(screen *screen);
-static void move_cursor_right(screen *screen, u32 x);
-static void set_cursor_column(screen *screen, u32 x);
+// static void place_cursor(screen *screen, u32 y, u32 x);
+// static void write_string(screen *screen, str s);
+// static void set_color(screen *screen, u32 color);
+// static void reset_color(screen *screen);
+// static void move_cursor_right(screen *screen, u32 x);
+// static void set_cursor_column(screen *screen, u32 x);
 static inline grid_view screen_view(screen *screen);
-static void flush_buffer(screen *screen);
+// static void flush_buffer(screen *screen);
+#if TESTS
 static void free_screen(screen *screen);
+#endif
 

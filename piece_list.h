@@ -1,38 +1,9 @@
-typedef enum insert_state
-{
-    Init, 
-    Inserted,
-    Deleted,
-} insert_state;
-
-typedef struct list_piece
-{
-    piece piece;
-    dlist list;
-} list_piece;
-
-typedef struct insert_mode
-{
-    memory_arena insert_mode_arena;
-    u32 abs_idx;
-    u32 position;
-    u32 cx;
-    u32 cy;
-
-    u32 ins_count;
-    u32 del_count;
-
-    dlist piece_head;
-
-    b32 deleted;
-
-    insert_state state;
-} insert_mode;
 
 struct base_iter;
 
 typedef struct piece_list
 {
+    b32 up_to_date;
     memory_arena list_arena;
     memory_arena insert_mode_arena;
 
@@ -73,9 +44,7 @@ typedef struct piece_list
     dlist window_sentinel;
     dlist list;
 
-    // This concerns search. We calculate matches lazily; meaning
-    // the matches that are kept (if we are not replacing) are the ones 
-    // visible on screen;
+    // This concerns search. 
     str last_searched_string;
     u32 match_len;
     u32 num_matches;
@@ -87,47 +56,77 @@ typedef struct piece_list
     u32 matches_capacity;
     u32 *matches;
 
-    b32 replaced;
     u32 replace_len;
-
 } piece_list;
 
-typedef struct 
-{
-    segmented_node *node;
-    u32 abs_idx;
-    u32 piece_index;
-    u32 pos;
-    u32 line;
-    piece piece;
-} iter;
+/* ----------------------------------- Piece List Search -------------------------------------- */
 
-static buffer_cursor cursor_from_position(piece_list *list, base_iter *last_location, u32 position);
-static u32 position_from_cursor(piece_list *list, base_iter *last_location, buffer_cursor bc);
+
 static base_iter find_abs_idx(piece_list *list, base_iter *last_location, u32 abs_idx);
+static base_iter find_position(piece_list *list, base_iter *last_location, u32 position);
+static base_iter find_line(piece_list *list, base_iter *last_location, u32 line);
+static base_iter find_cursor(piece_list *list, base_iter *last_location, buffer_cursor cursor);
+static u32 find_char(piece_list *list, base_iter *last_location, str match, u32 count, buffer_cursor cursor);
+static u32 find_char_back(
+    piece_list *list,
+    base_iter *last_location,
+    str match,
+    u32 count, 
+    buffer_cursor cursor);
+static buffer_cursor find_word(piece_list *list, base_iter *last_location, u32 count, buffer_cursor cursor);
+static buffer_cursor find_word_back(
+    piece_list *list,
+    base_iter *last_location,
+    u32 count,
+    buffer_cursor cursor);
+
+static u32 skip_space(piece_list *list, base_iter *last_location, u32 cy);
+static iter_range range_search(
+    piece_list *list,
+    base_iter *last_location,
+    buffer_cursor cursor,
+    u8 open,
+    u8 close);
+
+static void search_str(piece_list *list, str search_string);
+
+static u32 get_line_len(piece_list *list, base_iter *last_location, u32 line);
+
+/* -------------------------------------- Piece List Operations -------------------------------- */
+
 static void replace(piece_list *list, cursor start, cursor end, piece *pieces, u32 num_pieces);
-static base_iter find_cursor(piece_list *list, base_iter *last_location, buffer_cursor bc);
+static void copy_serialized(
+    piece_list *list,
+    cursor start,
+    u32 start_offset,
+    cursor end, 
+    u32 end_offset,
+    string text);
+
 static void copy_range(cursor start, cursor end, u32 count, piece_slice slice);
+#if TESTS
+static void write_piece_to_text(piece_list *list, piece_slice p_slice, string *buf);
+#endif
+static piece serialize_piece_range_to(piece_list *a, piece_list *b, piece_slice p_slice);
+static void yank(piece_list *list, p_buffer *buffer, buffer_cursor c0, buffer_cursor c1);
+static void range_replace(piece_list *list, buffer_cursor c0, buffer_cursor c1, piece_slice p_slice);
+
+/* -----------------------------------Piece List Initialization ----------------------------------- */
+
+static piece_list *create_buffer(memory_arena *arena, char *filepath);
+
+/* ----------------------------------- Piece List Flush Operations ---------------------------------- */
+
+#if TESTS
+static void write_to_buffer(piece_list *list, u8 *buf, u32 len);
+#endif
+static void write_buffer_to_file(piece_list *list);
+
 
 #if TESTS
 static inline void list_invariants(piece_list *list);
 #endif
 
-static void clear_insert_state(insert_mode *mode)
-{
-    mode->position = 0;
-    mode->ins_count = 0;
-    mode->del_count = 0;
-    mode->abs_idx = 0;
-    mode->state = Init;
-    mode->deleted = false;
-    INIT_LIST_HEAD(&mode->piece_head);
-}
-
-static inline void initialize_insert_state(insert_mode *mode)
-{
-    clear_insert_state(mode);
-}
 
 static inline void free_piece_list(piece_list *list)
 {

@@ -141,16 +141,9 @@ typedef enum
 } grid_type;
 
 // 
-typedef struct
-{
-    u8 *first_bit;
-    u8 *second_bit;
-} grid_bitmap;
 
 typedef u8 attr;
 
-#define Default 0
-#define Reversed 1
 
 typedef struct
 {
@@ -191,23 +184,16 @@ static inline void free_multilevel_grid(multilevel_grid *grid)
     }
 }
 
-static inline void resize_multilevel_grid(
-    multilevel_grid *grid,
-    u32 new_rows, 
-    u32 new_cols) 
+static inline void resize_multilevel_grid(multilevel_grid *grid, u32 new_rows, u32 new_cols) 
 {
     u32 new_size = new_rows * new_cols;
     grid->rows = new_rows;
     grid->cols = new_cols;
 
     grid->types = (u8 *) realloc((void *) grid->types, new_size * sizeof(grid_type));
-    // memset(grid->types, U8, new_size * sizeof(grid_type));
-
     grid->text_8 = (u8 *) realloc((void *) grid->text_8, new_size * sizeof(u8));
     grid->attr   = (attr *) realloc((void *) grid->attr, new_size * sizeof(attr));
     grid->v_cols = (u8 *) realloc((void *) grid->v_cols, new_size * sizeof(u8));
-    // memset(grid->attr, 8, new_size * sizeof(attr));
-    // memset(grid->types, ' ', new_size * sizeof(u8));
 
     if (grid->text_16)
     {

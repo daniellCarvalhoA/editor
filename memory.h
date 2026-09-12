@@ -274,18 +274,18 @@ static inline void sub_arena(
 }
 
 
-static inline void clear(
-    memory_arena *arena)
+static inline void clear_arena(memory_arena *arena)
 {
-    while (arena->block_count > 0)
+    while (arena->block_count > 1)
     { 
         free_last_block(arena);
     }
+
+    arena->used = 0;
     // initialize_arena(arena, arena->size, arena->base);
 }
 
-static inline void free_arena(
-    memory_arena *arena)
+static inline void free_arena(memory_arena *arena)
 {
     // while (arena->block_count > 0)
     // {

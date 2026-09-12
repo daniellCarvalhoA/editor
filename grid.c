@@ -35,12 +35,12 @@ static void fill_command_grid(screen *screen, window *win, grid_view grid)
 
 static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mode)
 {
-    // if ((win->buffer->changed) && (screen->change & Render_ShowSearchHighlight) && (win->buffer->last_searched_string.len > 0))
-    // {
-    //     win->buffer->num_matches = 0;
-    //     win->buffer->current_match = 0;
-    //     search_str(win->buffer, win->buffer->last_searched_string);
-    // }
+    if ((win->buffer->changed) && (screen->change & Render_ShowSearchHighlight) && (win->buffer->last_searched_string.len > 0))
+    {
+        win->buffer->num_matches = 0;
+        win->buffer->current_match = 0;
+        search_str(win->buffer, win->buffer->last_searched_string);
+    }
     window *active_window = screen->active_window;
     base_iter iter;
     b32 not_over = base_init(win->buffer, LineNumber, &iter);
@@ -57,17 +57,17 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
     win_range range = make_range(visual_cursor, curr_cursor);
 
 
-#if 0
+#if 1
     u32 current_match = 0;
-    u32 top_position = get_position(&iter);
+    u32 top_position = get_position(win->buffer, &iter);
 #endif
 
-    // while ((screen->change & Render_ShowSearchHighlight) && 
-    //        (current_match < win->buffer->num_matches) &&
-    //        (win->buffer->matches[current_match] < top_position))
-    // {
-    //     current_match++;
-    // }
+    while ((screen->change & Render_ShowSearchHighlight) && 
+           (current_match < win->buffer->num_matches) &&
+           (win->buffer->matches[current_match] < top_position))
+    {
+        current_match++;
+    }
 
     while (not_over && line < win->top_line + height)
     {
@@ -166,17 +166,16 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
                     }
                 }
 
-#if 0
+#if 1
                 if ((screen->change & Render_ShowSearchHighlight) && (current_match < win->buffer->num_matches)) 
                 {
                     u32 match_position = win->buffer->matches[current_match];
                     u32 match_len = win->buffer->match_len;
-                    if (win->buffer->replaced)
+                    if (win->buffer->replace_len)
                     {
                         match_position = match_position - (current_match * match_len) + (current_match * win->buffer->replace_len);
                         match_len = win->buffer->replace_len;
                     }
-
 
                     if (position < match_position)
                     {
@@ -231,7 +230,11 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
             memcpy(data, (u8 *) str_mode, len);
         }
         char *file_name = win->buffer->filepath;
-        u32 file_len = Minimum(width - len, strlen(file_name));
+        u32 file_len  = 0;
+        if (file_name)
+        {
+            file_len = Minimum(width - len, strlen(file_name));
+        }
 
         memcpy(data + len , (u8 *) file_name, file_len);
         memset(data + len + file_len, ' ', width - (len + file_len));
@@ -240,10 +243,19 @@ static void fill_grid(screen *screen, window *win, grid_view grid, mode edit_mod
 
 // NOTE: The way the grid data is layed out, this routine can benifite from SIMD speed up.
 //
-static void line_diff(screen *screen, window *win, grid_line old, grid_line new)
+static void line_diff(
+    screen *screen,
+    memory_arena *render_arena,
+    render_commands *r_commands,
+    window *win,
+    grid_line old,
+    grid_line new,
+    u32 row,  
+    u32 col)
 {
-    u16 prev_j = 0;
+    // u16 prev_j = 0;
     u16 width = get_width(screen, win);
+    u16 y = get_screen_y(screen, win);
     for (u16 j = 0; j < width; j++)
     {
         while ((j < width) && cells_are_equal_(old, new, j, j))
@@ -256,21 +268,21 @@ static void line_diff(screen *screen, window *win, grid_line old, grid_line new)
             break;
         }
 
-        if (j - prev_j)
-        {
-            move_cursor_right(screen, j - prev_j);
-        }
+        // if (j - prev_j)
+        // {
+        //     move_cursor_right(screen, j - prev_j);
+        // }
 
         u32 type_idx = j;
 
         grid_type prev_type = get_cell_type(new, j);
-        attr prev_attr = get_cell_attr(new, j);
+        attr prev_attr      = get_cell_attr(new, j);
         j++;
 
         while ((j < width) && !cells_are_equal_(old, new, j, j))
         {
             grid_type curr_type = get_cell_type(new, j);
-            attr curr_attr = get_cell_attr(new, j);
+            attr curr_attr      = get_cell_attr(new, j);
             // u8 vcol = get_cell_vcol(new, j);
             if (curr_type != prev_type || curr_attr != prev_attr)
             {
@@ -280,15 +292,37 @@ static void line_diff(screen *screen, window *win, grid_line old, grid_line new)
                 u8 *cell_data = get_cell_data(new, type_idx, prev_type);
                 if (prev_attr == Reversed)
                 {
-                    write_string(screen, STR_LIT("\x1b[7m"));
+                    // write_string(screen, STR_LIT("\x1b[7m"));
                 }
                 else
                 {
-                    write_string(screen, STR_LIT("\x1b[27m"));
+                    // write_string(screen, STR_LIT("\x1b[27m"));
                 }
 
-                str s = Str(cell_data, same_type_seq_diff_length * (prev_type + 1));
-                write_string(screen, s);
+                u32 len = same_type_seq_diff_length * (prev_type + 1);
+
+                u8 *buffer = PushArray(render_arena, len, u8, NoClear());
+                memcpy(buffer, cell_data, len);
+
+                str s  = {
+                    .buffer = buffer,
+                    .len = len
+                };
+
+                // str s = Str(cell_data, same_type_seq_diff_length * (prev_type + 1));
+                // write_string(screen, s);
+
+                render_command command = {
+                    .type = RenderCommand_Text,
+                    .color = prev_attr,
+                    .text = {
+                        .row = y + row,
+                        .col = col + type_idx,
+                        .text = s
+                    }
+                };
+
+                push_render_command(render_arena, r_commands, command);
 
                 type_idx = j;
                 prev_type = curr_type;
@@ -297,7 +331,7 @@ static void line_diff(screen *screen, window *win, grid_line old, grid_line new)
             j++;
         }
 
-        prev_j = j;
+        // prev_j = j;
 
         if (type_idx < j)
         {
@@ -307,28 +341,55 @@ static void line_diff(screen *screen, window *win, grid_line old, grid_line new)
             u8 *cell_data = get_cell_data(new, type_idx, prev_type);
             if (prev_attr == Reversed)
             {
-                write_string(screen, STR_LIT("\x1b[7m"));
+                // write_string(screen, STR_LIT("\x1b[7m"));
             }
             else
             {
-                write_string(screen, STR_LIT("\x1b[27m"));
+                // write_string(screen, STR_LIT("\x1b[27m"));
             }
 
-            str s = Str(cell_data, same_type_seq_diff_length * (prev_type + 1));
+            u32 len = same_type_seq_diff_length * (prev_type + 1);
+            u8 *buffer = PushArray(render_arena, len, u8, NoClear());
+            memcpy(buffer, cell_data, len);
+            str s = {
+                .buffer = buffer,
+                .len = len,
+            };
+
+            // str s = Str(cell_data, same_type_seq_diff_length * (prev_type + 1));
 
 
-            write_string(screen, s);
+            // write_string(screen, s);
+
+            render_command command = {
+                .type = RenderCommand_Text,
+                .color = prev_attr,
+                .text =  {
+                    .row = y + row,
+                    .col = col + type_idx,
+                    .text = s
+                }
+            };
+
+            push_render_command(render_arena, r_commands, command);
 
         }
+        // prev_j = j;
     } 
 }
 
-static void grid_diff(screen *screen, window *win, grid_view old, grid_view new)
+static void grid_diff(
+    screen *screen,
+    memory_arena *render_arena,
+    render_commands *r_commands,
+    window *win,
+    grid_view old,
+    grid_view new)
 {
-    u16 screen_y = get_screen_y(screen, win);
+    // u16 screen_y = get_screen_y(screen, win);
     u16 screen_x = get_screen_x(screen, win);
 
-    place_cursor(screen, screen_y, screen_x);
+    // place_cursor(screen, screen_y, screen_x);
 
     u16 win_height = get_height(screen, win);
     for (u16 i = 0; i < win_height; ++i)
@@ -338,12 +399,14 @@ static void grid_diff(screen *screen, window *win, grid_view old, grid_view new)
 
         old_line.line_start += screen->cols * new.y_offset + new.x_offset;
 
-        set_cursor_column(screen, screen_x);
-        line_diff(screen, win, old_line, new_line); 
-        if (i + 1 < win_height)
-        {
-            write_string(screen, STR_LIT("\r\n"));
-        }
+        // set_cursor_column(screen, screen_x);
+        line_diff(screen, render_arena, r_commands, win, old_line, new_line, i, screen_x); 
+        // if (i + 1 < win_height)
+        // {
+            
+            // render_comma
+            // write_string(screen, STR_LIT("\r\n"));
+        // }
     }
-    write_string(screen, STR_LIT("\x1b[27m"));
+    // write_string(screen, STR_LIT("\x1b[27m"));
 }

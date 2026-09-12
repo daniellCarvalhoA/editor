@@ -72,10 +72,10 @@ static void free_paste_buffer(p_buffer *buffer)
 //     return count;
 // }
 //
-static inline void reset_paste_buffer(p_buffer *buffer)
-{
-    memset(buffer, 0, sizeof(paste_buffer));
-}
+//static inline void reset_paste_buffer(p_buffer *buffer)
+//{
+//    memset(buffer, 0, sizeof(paste_buffer//));
+//}
 
 static inline paste_type paste_type_from_motion(motion motion, mode edit_mode)
 {

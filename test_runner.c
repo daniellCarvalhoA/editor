@@ -7,8 +7,8 @@
 
 // #include "e.h"
 #include "e_share.h"
-#include "memory.h"
 #include "prng.c"
+#include "string.c"
 
 #define NUM_TESTS 1000
 
