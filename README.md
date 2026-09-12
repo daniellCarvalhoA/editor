@@ -2,7 +2,7 @@
 
 Linux based terminal text editor.
 
-## Dependencies
+## Features
 
 - Modal editor (vim-like motions).
 - Multi window layout (not tabs).
@@ -15,3 +15,8 @@ Linux based terminal text editor.
 $ bash build.sh
 $ ./build/e filename
 ```
+
+
+## Dependencies
+
+- [utf8proc](https://juliastrings.github.io/utf8proc/)

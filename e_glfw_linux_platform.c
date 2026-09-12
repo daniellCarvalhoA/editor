@@ -27,11 +27,6 @@ typedef struct
     atlas *atlas;
 } window_handle;
 
-// PLATFORM_GET_WINDOW_HANDLE(LinuxGetTerminalHandle)
-// {
-//     platform_window_handle handle = { (void *) 1 };
-//     return handle;
-// }
 
 PLATFORM_GET_WINDOW_DIM(LinuxGetTerminalDim)
 {
@@ -46,13 +41,6 @@ PLATFORM_GET_WINDOW_DIM(LinuxGetTerminalDim)
     glfwGetFramebufferSize(w_handle->window, &win.ws_col, &win.ws_row);
     atlas *atlas = w_handle->atlas;
 
-    // int t_fd = (int)((u64) handle.handle); 
-    // i32 n = ioctl(t_fd, TIOCGWINSZ, &win);
-    // if (n == - 1)
-    // {
-    //     perror("ioctl");
-    //     abort();
-    // }
 
     Assert(win.ws_col > 0);
     Assert(win.ws_row > 0);
@@ -62,9 +50,6 @@ PLATFORM_GET_WINDOW_DIM(LinuxGetTerminalDim)
     return dim;
 }
 
-
-// #include "atlas.h"
-  
 int utf8_encode(uint32_t codepoint, char out[5]);
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 
