@@ -11,7 +11,7 @@ Linux based terminal text editor.
 
 ## Build
 
-- ```console
+```console
 $ bash build.sh
 $ ./build/e filename
 ```
