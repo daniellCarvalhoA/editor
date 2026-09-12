@@ -20,3 +20,9 @@ $ ./build/e filename
 ## Dependencies
 
 - [utf8proc](https://juliastrings.github.io/utf8proc/)
+
+## Working on
+
+- Syntax highlighting
+- File manager
+- Gui frontend (opengl)
